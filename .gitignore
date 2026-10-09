@@ -1,0 +1,9 @@
+node_modules/
+client/node_modules/
+fb_session_data/
+fb_session_data_test/
+.env
+.env.local
+.DS_Store
+Thumbs.db
+*.log

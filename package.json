@@ -1,0 +1,27 @@
+{
+  "name": "mxh",
+  "version": "1.0.0",
+  "description": "Hệ thống giám sát nội dung y tế và thẩm mỹ trên mạng xã hội",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "server": "node server/index.js",
+    "client": "npm --prefix client run dev",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"node server/index.js\" \"npm --prefix client run dev\"",
+    "build": "npm --prefix client run build"
+  },
+  "keywords": [
+    "health-monitoring",
+    "facebook-crawler",
+    "medical-compliance"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^9.1.2",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "playwright": "^1.64.0"
+  }
+}

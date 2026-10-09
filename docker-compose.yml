@@ -1,0 +1,14 @@
+services:
+  medical-monitor:
+    build: .
+    container_name: mxh_medical_monitor
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - META_ACCESS_TOKEN=${META_ACCESS_TOKEN:-}
+    volumes:
+      - ./data:/app/data
+      - ./fb_session_data:/app/fb_session_data

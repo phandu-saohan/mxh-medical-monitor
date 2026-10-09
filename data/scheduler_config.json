@@ -1,0 +1,33 @@
+{
+  "enabled": true,
+  "intervalHours": 6,
+  "scheduledTimes": [
+    "08:00",
+    "14:00",
+    "20:00"
+  ],
+  "useMetaAdLibrary": true,
+  "useCrawler": true,
+  "lastRun": "06/10/2025 08:00:00",
+  "nextRun": "06/10/2025 14:00:00",
+  "history": [
+    {
+      "time": "06/10/2025 08:00",
+      "keyword": "nâng mũi cấu trúc",
+      "violationsFound": 3,
+      "status": "Thành công"
+    },
+    {
+      "time": "05/10/2025 20:00",
+      "keyword": "tiêm filler botox",
+      "violationsFound": 5,
+      "status": "Thành công"
+    },
+    {
+      "time": "05/10/2025 14:00",
+      "keyword": "hút mỡ bụng spa",
+      "violationsFound": 2,
+      "status": "Thành công"
+    }
+  ]
+}
