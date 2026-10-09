@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://supabase-supabase-7c4fe6-72-61-123-73.sslip.io';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIxMDY3MTU4MjksImlhdCI6MTc5MTM1NTgyOSwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlzcyI6InN1cGFiYXNlIn0.V3vdSFKXr9uLlYG0QLUYnjtug8AKKoLt6NL_vZCPRxk';
@@ -12,6 +13,9 @@ export function getSupabase() {
         auth: {
           persistSession: false,
           autoRefreshToken: false
+        },
+        realtime: {
+          transport: WebSocket
         }
       });
       console.log(`[Supabase] Đã kết nối Supabase tại: ${SUPABASE_URL}`);
