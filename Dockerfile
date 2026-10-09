@@ -10,11 +10,6 @@ RUN npm install --omit=dev
 # Copy source code and prebuilt frontend assets
 COPY . .
 
-# Build client
-WORKDIR /app/client
-RUN npm install && npm run build
-WORKDIR /app
-
 EXPOSE 3001
 
 ENV PORT=3001
