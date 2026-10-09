@@ -38,6 +38,11 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   const [schedulerConfig, setSchedulerConfig] = useState(null);
   const [isSavingScheduler, setIsSavingScheduler] = useState(false);
 
+  // Cookie input state
+  const [showCookieInput, setShowCookieInput] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [isSavingCookies, setIsSavingCookies] = useState(false);
+
   const quickKeywords = [
     'nâng mũi cấu trúc',
     'tiêm filler giá sinh viên',
@@ -101,6 +106,32 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   }, [isOpen, onRefreshViolations]);
 
   if (!isOpen) return null;
+
+  // B1: Save Facebook Cookies
+  const handleSaveCookies = async () => {
+    if (!cookieInput.trim()) {
+      alert('Vui lòng nhập chuỗi Cookie Facebook.');
+      return;
+    }
+    setIsSavingCookies(true);
+    try {
+      const res = await fetch('/api/crawler/save-cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: cookieInput })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert(data.message || 'Đã lưu thành công phiên đăng nhập Facebook!');
+      setShowCookieInput(false);
+      setCookieInput('');
+      fetch('/api/crawler/status').then((r) => r.json()).then(setSessionStatus);
+    } catch (e) {
+      alert(`Lỗi lưu cookie: ${e.message}`);
+    } finally {
+      setIsSavingCookies(false);
+    }
+  };
 
   // B1: Open Browser for Login
   const handleOpenBrowser = async () => {
@@ -282,7 +313,7 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-bold text-sm text-slate-800 flex items-center space-x-1.5">
                         <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold">1</span>
-                        <span>B1: Đăng nhập Facebook &amp; Lưu phiên</span>
+                        <span>B1: Phiên Đăng Nhập Facebook</span>
                       </span>
                       {sessionStatus?.hasSavedSession ? (
                         <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-md text-[10px] flex items-center space-x-1">
@@ -296,18 +327,52 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                       )}
                     </div>
                     <p className="text-slate-600 leading-relaxed text-[11px] mb-3">
-                      Khởi chạy Google Chrome thực tế để cán bộ đăng nhập FB một lần duy nhất. Cookies và session token được lưu vĩnh viễn trong hệ thống để tự động hóa quét các lần sau.
+                      Lưu cookies hoặc phiên FB một lần duy nhất để phục vụ rà soát tự động không gián đoạn.
                     </p>
+
+                    {showCookieInput && (
+                      <div className="mb-3 p-3 bg-white border border-blue-200 rounded-lg space-y-2">
+                        <div className="text-[11px] font-bold text-slate-700">Dán Cookie Facebook (c_user &amp; xs):</div>
+                        <textarea
+                          rows={3}
+                          value={cookieInput}
+                          onChange={(e) => setCookieInput(e.target.value)}
+                          placeholder="c_user=1000...; xs=2%3A... (hoặc toàn bộ chuỗi cookie từ F12)"
+                          className="w-full p-2 text-[11px] border border-slate-300 rounded-md font-mono bg-slate-50 focus:bg-white focus:outline-hidden focus:border-blue-500"
+                        />
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400">F12 &gt; Application &gt; Cookies</span>
+                          <button
+                            type="button"
+                            onClick={handleSaveCookies}
+                            disabled={isSavingCookies}
+                            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-md shadow-xs cursor-pointer disabled:opacity-50"
+                          >
+                            {isSavingCookies ? 'Đang lưu...' : 'Lưu Phiên Cookie'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    onClick={handleOpenBrowser}
-                    disabled={isOpeningBrowser || isRunningScan}
-                    className="w-full py-2.5 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 rounded-lg font-bold flex items-center justify-center space-x-2 transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                  >
-                    <Globe className="w-4 h-4 text-blue-600" />
-                    <span>{isOpeningBrowser ? 'Đang mở trình duyệt...' : 'Mở Trình Duyệt Đăng Nhập FB'}</span>
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setShowCookieInput(!showCookieInput)}
+                      className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>{showCookieInput ? 'Đóng Ô Nhập Cookie' : 'Nhập Cookie Facebook (Khuyên dùng)'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleOpenBrowser}
+                      disabled={isOpeningBrowser || isRunningScan}
+                      className="w-full py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-[11px] font-medium flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      <Globe className="w-3.5 h-3.5 text-slate-500" />
+                      <span>{isOpeningBrowser ? 'Đang mở trình duyệt...' : 'Mở Trình Duyệt Đồ Họa (Chỉ máy có màn hình)'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Bước 2 */}

@@ -20,6 +20,7 @@ import { isSupabaseConnected } from './supabase.js';
 import { analyzeContent, VIOLATION_CATEGORIES } from './analyzer.js';
 import {
   openBrowserForLogin,
+  saveFacebookCookies,
   runScrapeAndInspect,
   getCrawlerStatus,
   subscribeCrawlerEvents
@@ -251,6 +252,17 @@ app.post('/api/crawler/open-login', async (req, res) => {
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Step 1 (Server/Cloud) - Save Facebook Cookies / Session
+app.post('/api/crawler/save-cookies', (req, res) => {
+  try {
+    const { cookies } = req.body;
+    const result = saveFacebookCookies(cookies);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

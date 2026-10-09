@@ -9,6 +9,7 @@ import { addViolation, getViolations, incrementScannedCount } from './db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const USER_DATA_DIR = path.join(__dirname, '..', 'fb_session_data');
+const STORAGE_STATE_FILE = path.join(USER_DATA_DIR, 'storageState.json');
 
 function ensureNoOrphanedChrome() {
   if (process.platform === 'win32') {
@@ -70,17 +71,104 @@ function logMessage(text, type = 'info') {
 }
 
 export function getCrawlerStatus() {
-  const hasProfile = fs.existsSync(USER_DATA_DIR) && fs.readdirSync(USER_DATA_DIR).length > 0;
+  const hasProfile = (fs.existsSync(USER_DATA_DIR) && fs.readdirSync(USER_DATA_DIR).length > 0) || fs.existsSync(STORAGE_STATE_FILE);
   return {
     ...currentCrawlerStatus,
     hasSavedSession: hasProfile
   };
 }
 
+export function saveFacebookCookies(rawInput) {
+  if (!rawInput || typeof rawInput !== 'string' || !rawInput.trim()) {
+    throw new Error('Vui lòng nhập chuỗi cookie hoặc token phiên Facebook.');
+  }
+
+  if (!fs.existsSync(USER_DATA_DIR)) {
+    fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+  }
+
+  const cookieList = [];
+  const trimmed = rawInput.trim();
+
+  // If input is JSON
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      for (const c of parsed) {
+        if (c.name && c.value) {
+          cookieList.push({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || '.facebook.com',
+            path: c.path || '/',
+            expires: -1,
+            httpOnly: c.httpOnly ?? (c.name === 'xs' || c.name === 'datr'),
+            secure: true,
+            sameSite: 'Lax'
+          });
+        }
+      }
+    } catch {}
+  }
+
+  // If not JSON, parse as standard "name=value; name2=value2"
+  if (cookieList.length === 0) {
+    const pairs = trimmed.split(';');
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx > -1) {
+        const name = pair.slice(0, idx).trim();
+        const value = pair.slice(idx + 1).trim();
+        if (name && value) {
+          cookieList.push({
+            name,
+            value,
+            domain: '.facebook.com',
+            path: '/',
+            expires: -1,
+            httpOnly: name === 'xs' || name === 'datr',
+            secure: true,
+            sameSite: 'Lax'
+          });
+        }
+      }
+    }
+  }
+
+  if (cookieList.length === 0) {
+    throw new Error('Không tìm thấy cookie hợp lệ. Định dạng mẫu: c_user=1000...; xs=2%3A...');
+  }
+
+  const storageState = {
+    cookies: cookieList,
+    origins: []
+  };
+
+  fs.writeFileSync(STORAGE_STATE_FILE, JSON.stringify(storageState, null, 2), 'utf-8');
+  
+  const cUser = cookieList.find(c => c.name === 'c_user')?.value;
+  logMessage(`Đã nạp và lưu thành công ${cookieList.length} cookies phiên Facebook (c_user: ${cUser || 'Hợp lệ'}).`, 'success');
+  broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
+
+  return {
+    success: true,
+    message: `Đã lưu thành công ${cookieList.length} cookies phiên đăng nhập Facebook!`,
+    userId: cUser,
+    cookiesCount: cookieList.length
+  };
+}
+
 /**
- * Step 1: Mở trình duyệt thực tế để giám sát viên đăng nhập và lưu session vĩnh viễn
+ * Step 1: Mở trình duyệt thực tế để giám sát viên đăng nhập và lưu session vĩnh viễn (Chỉ máy có màn hình)
  */
 export async function openBrowserForLogin() {
+  const isHeadlessServer = process.platform === 'linux' && !process.env.DISPLAY;
+  if (isHeadlessServer) {
+    throw new Error(
+      'Máy chủ Dokploy đang chạy trên môi trường Linux Server không có màn hình đồ họa X11. Vui lòng sử dụng tính năng "Nhập Cookie Facebook" bên dưới hoặc dùng tab "Thư Viện Quảng Cáo Meta (Không cần đăng nhập)".'
+    );
+  }
+
   if (activeBrowserContext) {
     try {
       const pages = activeBrowserContext.pages();
@@ -96,18 +184,19 @@ export async function openBrowserForLogin() {
   // Ensure no zombie background Chrome is locking the profile
   ensureNoOrphanedChrome();
 
-  logMessage('Bước 1: Khởi động Google Chrome thực tế với hồ sơ lưu trữ an toàn...', 'info');
+  logMessage('Bước 1: Khởi động trình duyệt với hồ sơ lưu trữ an toàn...', 'info');
   currentCrawlerStatus.isRunning = true;
   currentCrawlerStatus.step = 'LOGIN_OPEN';
 
   try {
     activeBrowserContext = await chromium.launchPersistentContext(USER_DATA_DIR, {
       headless: false,
-      channel: 'chrome',
       viewport: null,
       args: [
         '--start-maximized',
         '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
         '--no-first-run',
         '--no-default-browser-check'
       ]
@@ -117,8 +206,8 @@ export async function openBrowserForLogin() {
     logMessage('Đang mở trang đăng nhập Facebook (https://www.facebook.com)...', 'info');
     await page.goto('https://www.facebook.com', { waitUntil: 'domcontentloaded', timeout: 45000 });
 
-    logMessage('Cửa sổ Chrome đã mở. Cán bộ vui lòng đăng nhập tài khoản Facebook trên cửa sổ này.', 'success');
-    logMessage('Cookies và phiên đăng nhập sẽ được lưu vĩnh viễn tại fb_session_data cho các lần quét tự động.', 'info');
+    logMessage('Cửa sổ trình duyệt đã mở. Cán bộ vui lòng đăng nhập tài khoản Facebook trên cửa sổ này.', 'success');
+    logMessage('Cookies và phiên đăng nhập sẽ được lưu vĩnh viễn cho các lần quét tự động.', 'info');
 
     activeBrowserContext.on('close', () => {
       logMessage('Trình duyệt đã đóng. Dữ liệu phiên đăng nhập đã được lưu trữ an toàn trong hệ thống.', 'info');
@@ -180,13 +269,28 @@ export async function runScrapeAndInspect(options = {}) {
 
       browserContext = await chromium.launchPersistentContext(USER_DATA_DIR, {
         headless: true, // headless mode for production scan
-        channel: 'chrome',
         args: [
           '--disable-blink-features=AutomationControlled',
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
           '--no-first-run',
           '--no-default-browser-check'
         ]
       });
+
+      // Inject saved cookies from storageState.json if present
+      if (fs.existsSync(STORAGE_STATE_FILE)) {
+        try {
+          const state = JSON.parse(fs.readFileSync(STORAGE_STATE_FILE, 'utf8'));
+          if (state.cookies && state.cookies.length > 0) {
+            await browserContext.addCookies(state.cookies);
+            logMessage(`Đã nạp ${state.cookies.length} cookies phiên Facebook đã lưu.`, 'info');
+          }
+        } catch (e) {
+          console.warn('Lỗi đọc storageState:', e.message);
+        }
+      }
       createdOwnContext = true;
     }
 
