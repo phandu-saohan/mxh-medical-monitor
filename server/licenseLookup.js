@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { upsertFacilityToSupabase, deleteFacilityFromSupabase } from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -189,6 +190,7 @@ export function addLicensedFacility(facility) {
   };
   list.unshift(newItem);
   saveLicensedFacilities(list);
+  upsertFacilityToSupabase(newItem).catch(err => console.warn('[Supabase] Lỗi lưu cơ sở:', err.message));
   return newItem;
 }
 
@@ -196,6 +198,7 @@ export function deleteLicensedFacility(id) {
   const list = getLicensedFacilities('Tất cả');
   const filtered = list.filter(f => f.id !== id);
   saveLicensedFacilities(filtered);
+  deleteFacilityFromSupabase(id).catch(err => console.warn('[Supabase] Lỗi xóa cơ sở:', err.message));
   return true;
 }
 

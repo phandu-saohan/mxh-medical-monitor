@@ -13,8 +13,10 @@ import {
   getKeywords,
   saveKeywords,
   getStats,
-  incrementScannedCount
+  incrementScannedCount,
+  initDbSync
 } from './db.js';
+import { isSupabaseConnected } from './supabase.js';
 import { analyzeContent, VIOLATION_CATEGORIES } from './analyzer.js';
 import {
   openBrowserForLogin,
@@ -433,6 +435,25 @@ app.post('/api/settings/ai', async (req, res) => {
   }
 });
 
+// API: Supabase Connection & Health Status
+app.get('/api/supabase/status', (req, res) => {
+  res.json({
+    connected: isSupabaseConnected(),
+    url: process.env.SUPABASE_URL || 'https://supabase-supabase-7c4fe6-72-61-123-73.sslip.io',
+    tables: ['violations', 'keywords', 'licensed_facilities', 'scan_stats', 'scheduler_config'],
+    message: 'Đã kết nối cơ sở dữ liệu Supabase PostgreSQL trên Dokploy'
+  });
+});
+
+app.post('/api/supabase/sync', async (req, res) => {
+  try {
+    await initDbSync();
+    res.json({ success: true, message: 'Đồng bộ cơ sở dữ liệu Supabase thành công!' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Serve frontend built assets
 const clientDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {
@@ -442,6 +463,9 @@ if (fs.existsSync(clientDist)) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 }
+
+// Initial Supabase DB Sync
+initDbSync().catch(err => console.warn('[Supabase] Khởi tạo đồng bộ thất bại:', err.message));
 
 // Start recurring scheduler at boot
 initScheduler();

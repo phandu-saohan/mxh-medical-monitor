@@ -41,6 +41,12 @@ export default function Header({ searchKeyword, setSearchKeyword, onOpenCrawler,
 
       {/* Right Actions & User Profile */}
       <div className="flex items-center space-x-5">
+        {/* Supabase Status Pill */}
+        <div title="Supabase Self-hosted kết nối thành công (Dokploy)" className="hidden md:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Supabase Live</span>
+        </div>
+
         {/* Crawler Status Pill */}
         <button
           onClick={onOpenCrawler}

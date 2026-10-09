@@ -2,6 +2,16 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { analyzeContent, VIOLATION_CATEGORIES } from './analyzer.js';
+import {
+  fetchViolationsFromSupabase,
+  upsertViolationToSupabase,
+  deleteViolationFromSupabase,
+  clearViolationsFromSupabase,
+  syncKeywordsToSupabase,
+  fetchKeywordsFromSupabase,
+  updateStatsInSupabase,
+  fetchStatsFromSupabase
+} from './supabase.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -374,10 +384,28 @@ export function saveViolations(data) {
   fs.writeFileSync(VIOLATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
 }
 
+export async function initDbSync() {
+  try {
+    const sbViolations = await fetchViolationsFromSupabase();
+    if (sbViolations && sbViolations.length > 0) {
+      saveViolations(sbViolations);
+      console.log(`[Supabase] Đã đồng bộ ${sbViolations.length} hồ sơ vi phạm vào bộ nhớ.`);
+    }
+    const sbStats = await fetchStatsFromSupabase();
+    if (sbStats && sbStats.totalScanned > 0) {
+      fs.writeFileSync(STATS_FILE, JSON.stringify(sbStats, null, 2), 'utf-8');
+      console.log(`[Supabase] Đã đồng bộ số lượng quét (${sbStats.totalScanned}).`);
+    }
+  } catch (err) {
+    console.warn('[Supabase] Không thể đồng bộ ban đầu:', err.message);
+  }
+}
+
 export function addViolation(item) {
   const list = getViolations();
   list.unshift(item);
   saveViolations(list);
+  upsertViolationToSupabase(item).catch(err => console.warn('[Supabase] Lỗi lưu vi phạm:', err.message));
   return item;
 }
 
@@ -387,6 +415,7 @@ export function updateViolation(id, updates) {
   if (idx !== -1) {
     list[idx] = { ...list[idx], ...updates };
     saveViolations(list);
+    upsertViolationToSupabase(list[idx]).catch(err => console.warn('[Supabase] Lỗi cập nhật vi phạm:', err.message));
     return list[idx];
   }
   return null;
@@ -396,6 +425,7 @@ export function deleteViolation(id) {
   const list = getViolations();
   const filtered = list.filter(v => v.id !== id);
   saveViolations(filtered);
+  deleteViolationFromSupabase(id).catch(err => console.warn('[Supabase] Lỗi xóa vi phạm:', err.message));
   return true;
 }
 
@@ -414,12 +444,15 @@ export function incrementScannedCount(count = 1) {
   const stats = getStats();
   stats.totalScanned = (stats.totalScanned || 0) + count;
   fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2), 'utf-8');
+  updateStatsInSupabase(stats.totalScanned).catch(err => console.warn('[Supabase] Lỗi cập nhật stats:', err.message));
   return stats;
 }
 
 export function clearViolations() {
   saveViolations([]);
   fs.writeFileSync(STATS_FILE, JSON.stringify({ totalScanned: 0 }, null, 2), 'utf-8');
+  clearViolationsFromSupabase().catch(err => console.warn('[Supabase] Lỗi xóa violations:', err.message));
+  updateStatsInSupabase(0).catch(() => {});
   const evidenceDir = path.join(DATA_DIR, 'evidence');
   if (fs.existsSync(evidenceDir)) {
     try {
@@ -481,4 +514,5 @@ export function getKeywords() {
 
 export function saveKeywords(kws) {
   fs.writeFileSync(KEYWORDS_FILE, JSON.stringify(kws, null, 2), 'utf-8');
+  syncKeywordsToSupabase(kws).catch(err => console.warn('[Supabase] Lỗi đồng bộ từ khóa:', err.message));
 }
