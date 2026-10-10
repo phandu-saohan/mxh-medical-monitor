@@ -357,12 +357,23 @@ export default function App() {
                     Tổng kết số liệu phục vụ báo cáo định kỳ cho Lãnh đạo Sở Y tế và Cục Quản lý Khám chữa bệnh.
                   </p>
                 </div>
-                <button
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
-                >
-                  Xuất Báo Cáo Tổng Hợp
-                </button>
+                <div className="flex items-center space-x-2">
+                  <a
+                    href="/api/reports/periodic-summary"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <span>📑 In Báo Cáo Định Kỳ Trình Lãnh Đạo (A4 PDF)</span>
+                  </a>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                  >
+                    Xuất Báo Cáo Tổng Hợp
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

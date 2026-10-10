@@ -184,14 +184,137 @@ export function saveLicensedFacilities(facilities) {
 export function addLicensedFacility(facility) {
   const list = getLicensedFacilities('Tất cả');
   const newItem = {
-    id: `GPHD-CUSTOM-${Date.now().toString().slice(-4)}`,
-    status: 'Đang hoạt động',
+    id: facility.id || `GPHD-CUSTOM-${Date.now().toString().slice(-4)}`,
+    status: facility.status || 'Đang hoạt động',
     ...facility
   };
   list.unshift(newItem);
   saveLicensedFacilities(list);
   upsertFacilityToSupabase(newItem).catch(err => console.warn('[Supabase] Lỗi lưu cơ sở:', err.message));
   return newItem;
+}
+
+/**
+ * Nhập hàng loạt danh sách GPHĐ (Excel/CSV parsed list)
+ */
+export function bulkImportLicensedFacilities(items = []) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('Danh sách cơ sở rỗng hoặc không đúng định dạng.');
+  }
+
+  const currentList = getLicensedFacilities('Tất cả');
+  const existingLicenseNumbers = new Set(currentList.map(f => (f.licenseNumber || '').toLowerCase().trim()));
+  const existingNames = new Set(currentList.map(f => (f.name || '').toLowerCase().trim()));
+
+  let importedCount = 0;
+  let updatedCount = 0;
+
+  for (const item of items) {
+    if (!item.name || !item.name.trim()) continue;
+
+    const licNum = (item.licenseNumber || `GPHD-IMP-${Date.now().toString().slice(-4)}-${importedCount}`).trim();
+    const licKey = licNum.toLowerCase();
+    const nameKey = item.name.toLowerCase().trim();
+
+    const facilityData = {
+      id: item.id || `GPHD-IMP-${Date.now().toString().slice(-6)}-${importedCount}`,
+      name: item.name.trim(),
+      licenseNumber: licNum,
+      issuedBy: item.issuedBy || 'Sở Y tế',
+      city: item.city || item.tinhThanh || 'Toàn quốc',
+      type: item.type || item.loaiHinh || 'Phòng khám chuyên khoa Thẩm mỹ',
+      doctorInCharge: item.doctorInCharge || item.bacSi || 'BS. Chuyên khoa',
+      scope: item.scope || item.phamVi || 'Phẫu thuật tạo hình thẩm mỹ theo danh mục phê duyệt',
+      address: item.address || item.diaChi || 'Chưa cập nhật',
+      status: item.status || 'Đang hoạt động'
+    };
+
+    if (existingLicenseNumbers.has(licKey) || existingNames.has(nameKey)) {
+      // Update existing
+      const idx = currentList.findIndex(f => 
+        (f.licenseNumber && f.licenseNumber.toLowerCase().trim() === licKey) ||
+        (f.name && f.name.toLowerCase().trim() === nameKey)
+      );
+      if (idx !== -1) {
+        currentList[idx] = { ...currentList[idx], ...facilityData };
+        updatedCount++;
+      }
+    } else {
+      currentList.unshift(facilityData);
+      existingLicenseNumbers.add(licKey);
+      existingNames.add(nameKey);
+      importedCount++;
+    }
+
+    upsertFacilityToSupabase(facilityData).catch(() => {});
+  }
+
+  saveLicensedFacilities(currentList);
+  return {
+    success: true,
+    total: currentList.length,
+    importedCount,
+    updatedCount,
+    message: `Đã nhập thành công ${importedCount} cơ sở mới và cập nhật ${updatedCount} cơ sở trong CSDL Sở Y tế.`
+  };
+}
+
+/**
+ * Bóc tách dữ liệu văn bản CSV thành danh sách cơ sở
+ */
+export function parseCsvFacilitiesText(csvText) {
+  if (!csvText || typeof csvText !== 'string') return [];
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim().length > 0);
+  if (lines.length < 2) return [];
+
+  // Parse header
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
+  const results = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    // Simple CSV row parser handling quotes
+    const row = [];
+    let insideQuote = false;
+    let current = '';
+
+    for (const char of lines[i]) {
+      if (char === '"' || char === "'") {
+        insideQuote = !insideQuote;
+      } else if (char === ',' && !insideQuote) {
+        row.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    row.push(current.trim());
+
+    if (row.length < 2) continue;
+
+    const getVal = (possibleHeaders, defaultVal = '') => {
+      for (const h of possibleHeaders) {
+        const idx = headers.findIndex(hdr => hdr.includes(h));
+        if (idx !== -1 && row[idx]) return row[idx].replace(/["']/g, '').trim();
+      }
+      return defaultVal;
+    };
+
+    const name = getVal(['tên', 'tên cơ sở', 'name', 'co so']);
+    if (!name) continue;
+
+    results.push({
+      name,
+      licenseNumber: getVal(['số gphđ', 'gphđ', 'số giấy phép', 'license', 'so gphd'], 'Đang cập nhật'),
+      issuedBy: getVal(['cơ quan', 'cấp bởi', 'issued', 'so y te'], 'Sở Y tế'),
+      city: getVal(['tỉnh', 'thành phố', 'city', 'dia ban'], 'TP. Hồ Chí Minh'),
+      type: getVal(['loại hình', 'loại', 'type'], 'Phòng khám Chuyên khoa Thẩm mỹ'),
+      doctorInCharge: getVal(['bác sĩ', 'phụ trách', 'doctor'], 'BSCK. Thẩm mỹ'),
+      scope: getVal(['phạm vi', 'chuyên môn', 'kỹ thuật', 'scope'], 'Tạo hình thẩm mỹ theo danh mục kỹ thuật phê duyệt'),
+      address: getVal(['địa chỉ', 'address'], 'Chưa cập nhật')
+    });
+  }
+
+  return results;
 }
 
 export function deleteLicensedFacility(id) {
@@ -203,9 +326,9 @@ export function deleteLicensedFacility(id) {
 }
 
 /**
- * Checks facility name against licensed database with city awareness
+ * Checks facility name against licensed database with city awareness and scope verification
  */
-export function verifyFacilityLicense(facilityName, city) {
+export function verifyFacilityLicense(facilityName, city, serviceClaim = '') {
   if (!facilityName) return { isLicensed: false, message: 'Chưa có thông tin tên cơ sở' };
 
   const facilities = getLicensedFacilities('Tất cả');
@@ -218,11 +341,30 @@ export function verifyFacilityLicense(facilityName, city) {
   });
 
   if (match) {
+    // Nếu có thông tin dịch vụ quảng cáo, kiểm tra xem có vượt quá phạm vi hoạt động chuyên môn không
+    if (serviceClaim) {
+      const claimLower = serviceClaim.toLowerCase();
+      const scopeLower = (match.scope || '').toLowerCase();
+
+      const isMajorSurgeryClaim = /hút mỡ|nâng ngực|gọt cằm|gọt hàm|cắt da bụng|tạo hình thành bụng/i.test(claimLower);
+      const isHospitalOnly = /bệnh viện/i.test(match.type) || /bệnh viện/i.test(match.name);
+
+      if (isMajorSurgeryClaim && !isHospitalOnly && !scopeLower.includes('đại phẫu')) {
+        return {
+          isLicensed: true,
+          facility: match,
+          warningLevel: 'Vượt quá phạm vi chuyên môn',
+          isScopeExceeded: true,
+          message: `CẢNH BÁO VƯỢT QUÁ PHẠM VI: Cơ sở "${match.name}" CÓ GIẤY PHÉP (Số: ${match.licenseNumber}), nhưng kỹ thuật quảng cáo ("${serviceClaim}") thuộc danh mục ĐẠI PHẪU (chỉ được thực hiện tại Bệnh viện đa khoa/chuyên khoa thẩm mỹ). Vi phạm Khoản 6 Điều 39 Nghị định 117/2020/NĐ-CP!`
+        };
+      }
+    }
+
     return {
       isLicensed: true,
       facility: match,
       warningLevel: 'Hợp lệ',
-      message: `CƠ SỞ ĐƯỢC CẤP PHÉP: "${match.name}" (Số GPHĐ: ${match.licenseNumber} do ${match.issuedBy} cấp). Phụ trách chuyên môn: ${match.doctorInCharge || 'Bác sĩ chuyên khoa'}.`
+      message: `CƠ SỞ ĐƯỢC CẤP PHÉP: "${match.name}" (Số GPHĐ: ${match.licenseNumber} do ${match.issuedBy} cấp). Phụ trách chuyên môn: ${match.doctorInCharge || 'Bác sĩ chuyên khoa'}. Phạm vi: ${match.scope}.`
     };
   }
 

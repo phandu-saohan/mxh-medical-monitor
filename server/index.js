@@ -26,19 +26,22 @@ import {
   subscribeCrawlerEvents
 } from './crawler.js';
 import { generateViolationReportHtml } from './export.js';
-import { captureLegalEvidence } from './evidence.js';
+import { captureLegalEvidence, archiveMediaToVault } from './evidence.js';
 import { searchMetaAdLibrary } from './metaAdLibrary.js';
 import {
   getSchedulerConfig,
   saveSchedulerConfig,
   executeScheduledJob,
-  initScheduler
+  initScheduler,
+  generatePeriodicReportHtml
 } from './scheduler.js';
 import {
   getLicensedFacilities,
   addLicensedFacility,
   deleteLicensedFacility,
-  verifyFacilityLicense
+  verifyFacilityLicense,
+  bulkImportLicensedFacilities,
+  parseCsvFacilitiesText
 } from './licenseLookup.js';
 import { generateAiKeywords } from './aiKeywords.js';
 import {
@@ -389,7 +392,8 @@ app.get('/api/crawler/events', (req, res) => {
   subscribeCrawlerEvents(res);
 });
 
-// Serve evidence snapshots statically
+// Serve evidence snapshots & vault files statically
+app.use('/api/evidence/vault', express.static(path.join(__dirname, '../data/evidence_vault')));
 app.use('/api/evidence', express.static(path.join(__dirname, '../data/evidence')));
 
 // API Phase 2: Capture Legal Evidence Snapshot with SHA-256 Checksum
@@ -397,6 +401,17 @@ app.post('/api/evidence/:id/capture', async (req, res) => {
   try {
     const evidence = await captureLegalEvidence(req.params.id);
     res.json({ success: true, evidence });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Option 3: Archive Raw Media into Permanent Evidence Vault (Chống xóa bài phi tang)
+app.post('/api/evidence/:id/archive-vault', async (req, res) => {
+  try {
+    const { mediaUrl } = req.body || {};
+    const vault = await archiveMediaToVault(req.params.id, mediaUrl);
+    res.json({ success: true, vault });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -413,7 +428,7 @@ app.post('/api/meta-ads/search', async (req, res) => {
   }
 });
 
-// API Phase 1: Scheduler Management
+// API Phase 1 & Option 2: Scheduler Management & Auto-Pilot 24/7
 app.get('/api/scheduler', (req, res) => {
   res.json(getSchedulerConfig());
 });
@@ -424,14 +439,30 @@ app.post('/api/scheduler', (req, res) => {
 });
 
 app.post('/api/scheduler/run-now', async (req, res) => {
-  executeScheduledJob().catch(console.error);
-  res.json({ success: true, message: 'Đã kích hoạt phiên rà soát định kỳ ngay lập tức.' });
+  try {
+    const runResult = await executeScheduledJob();
+    res.json({ success: true, message: 'Đã hoàn thành phiên rà soát định kỳ Auto-Pilot 24/7.', result: runResult });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// API Phase 3: Facility Operating License Lookup & Management
+// Option 2: Xuất Báo Cáo Định Kỳ Trình Lãnh Đạo Sở Y Tế (Khổ A4 chuẩn thể thức hành chính)
+app.get('/api/reports/periodic-summary', (req, res) => {
+  try {
+    const period = req.query.period || 'BÁO CÁO ĐỊNH KỲ';
+    const html = generatePeriodicReportHtml(period);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    res.status(500).send(`Lỗi tạo báo cáo: ${err.message}`);
+  }
+});
+
+// API Phase 3 & Option 1: Facility Operating License Lookup & Management
 app.get('/api/license/lookup', (req, res) => {
-  const { name, city } = req.query;
-  const result = verifyFacilityLicense(name, city);
+  const { name, city, serviceClaim } = req.query;
+  const result = verifyFacilityLicense(name, city, serviceClaim);
   res.json(result);
 });
 
@@ -447,6 +478,40 @@ app.post('/api/license/facilities', (req, res) => {
 app.delete('/api/license/facilities/:id', (req, res) => {
   deleteLicensedFacility(req.params.id);
   res.json({ success: true });
+});
+
+// Option 1: Import hàng loạt CSDL Giấy phép từ CSV / Danh sách
+app.post('/api/license/import', async (req, res) => {
+  try {
+    const { items, csvText } = req.body || {};
+    let facilitiesToImport = items;
+
+    if (!facilitiesToImport && csvText) {
+      facilitiesToImport = parseCsvFacilitiesText(csvText);
+    }
+
+    if (!Array.isArray(facilitiesToImport) || facilitiesToImport.length === 0) {
+      return res.status(400).json({ error: 'Không tìm thấy dữ liệu hợp lệ để nhập. Vui lòng kiểm tra định dạng CSV/danh sách.' });
+    }
+
+    const result = await bulkImportLicensedFacilities(facilitiesToImport);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Option 1: Tải template CSV mẫu cho cán bộ nhập liệu
+app.get('/api/license/template', (req, res) => {
+  const sampleCsv = 
+`Tên cơ sở,Số GPHĐ,Cơ quan cấp,Tỉnh thành,Loại hình,Người chịu trách nhiệm,Phạm vi chuyên môn,Địa chỉ
+Bệnh viện Thẩm mỹ Kangnam,00123/BYT-GPHĐ,Bộ Y tế,TP. Hồ Chí Minh,Bệnh viện Thẩm mỹ,BS. Trần Văn A,Phẫu thuật tạo hình thẩm mỹ toàn diện đại phẫu và tiểu phẫu,666 Cách Mạng Tháng 8 P.11 Q.3 TP.HCM
+Phòng khám Chuyên khoa Thẩm mỹ Seoul Center,07892/SYT-GPHĐ,Sở Y tế,Hà Nội,Phòng khám Chuyên khoa Thẩm mỹ,BS. Lê Thị B,Tạo hình mí mắt mũi không gây mê không đại phẫu,120 Phố Huế Hai Bà Trưng Hà Nội
+Viện Thẩm mỹ Quốc tế Thu Cúc,00456/BYT-GPHĐ,Bộ Y tế,Hà Nội,Bệnh viện Đa khoa / Thẩm mỹ,BS. Nguyễn Văn C,Phẫu thuật thẩm mỹ hút mỡ nâng ngực tạo hình,286 Thụy Khuê Tây Hồ Hà Nội`;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="mau_csdl_giay_phep_so_y_te.csv"');
+  res.send('\uFEFF' + sampleCsv); // prepend UTF-8 BOM
 });
 
 // Helper: Save environment variables to .env

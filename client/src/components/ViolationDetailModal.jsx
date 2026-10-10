@@ -17,7 +17,10 @@ import {
   RefreshCw,
   ScanText,
   FileText,
-  Sparkles
+  Sparkles,
+  Archive,
+  HardDrive,
+  Download
 } from 'lucide-react';
 
 function cleanContentText(text) {
@@ -42,6 +45,7 @@ export default function ViolationDetailModal({
 }) {
   const [status, setStatus] = useState(item?.status || 'Chờ xử lý');
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isArchivingVault, setIsArchivingVault] = useState(false);
   const [evidence, setEvidence] = useState(item?.evidence || null);
   const [licenseCheck, setLicenseCheck] = useState(null);
   const [ocrText, setOcrText] = useState(item?.ocrText || null);
@@ -109,6 +113,31 @@ export default function ViolationDetailModal({
       alert(`Lỗi chụp bằng chứng: ${e.message}`);
     } finally {
       setIsCapturing(false);
+    }
+  };
+
+  const handleArchiveVault = async () => {
+    setIsArchivingVault(true);
+    try {
+      const res = await fetch(`/api/evidence/${item.id}/archive-vault`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaUrl: item.mediaUrl || item.avatar })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEvidence((prev) => ({
+          ...(prev || {}),
+          vault: data.vault
+        }));
+        alert('Đã tải và niêm phong tệp phương tiện gốc vào Kho Bằng Chứng Số (Evidence Vault) thành công! Mã băm SHA-256 đã được xác lập.');
+      } else {
+        alert(data.error || 'Lỗi khi niêm phong vào Vault.');
+      }
+    } catch (e) {
+      alert(`Lỗi: ${e.message}`);
+    } finally {
+      setIsArchivingVault(false);
     }
   };
 
@@ -244,17 +273,22 @@ export default function ViolationDetailModal({
           </div>
         </div>
 
-        {/* Giai đoạn 2: Bằng Chứng Số & Mã Băm SHA-256 Card */}
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl p-4 space-y-2.5 shadow-md border border-slate-800">
+        {/* Giai đoạn 2 & Option 3: Bằng Chứng Số & Kho Lưu Trữ Bất Khả Biến (Evidence Vault) */}
+        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-xl p-4 space-y-3 shadow-md border border-slate-800">
           <div className="flex items-center justify-between">
             <span className="font-bold flex items-center space-x-1.5 text-cyan-300">
               <FileBadge2 className="w-4 h-4" />
-              <span>Chứng Cứ Pháp Lý &amp; Khóa SHA-256 (GĐ 2)</span>
+              <span>Chứng Cứ Pháp Lý &amp; Khóa SHA-256 (GĐ 2 &amp; Option 3)</span>
             </span>
-            {evidence ? (
+            {evidence?.vault?.isVaultArchived ? (
               <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
                 <ShieldCheck className="w-3 h-3" />
-                <span>Đã Niêm Phong</span>
+                <span>Đã Khóa Vault Offline</span>
+              </span>
+            ) : evidence ? (
+              <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Đã Niêm Phong Snapshot</span>
               </span>
             ) : (
               <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-md">
@@ -263,49 +297,100 @@ export default function ViolationDetailModal({
             )}
           </div>
 
-          {evidence ? (
-            <div className="space-y-1.5 text-[11px]">
+          {/* Snapshot evidence info */}
+          {evidence && (
+            <div className="space-y-1.5 text-[11px] border-b border-slate-800 pb-2.5">
               <div className="text-slate-300">
                 <span className="text-slate-400">Thời điểm chụp:</span> {evidence.capturedAt}
               </div>
               <div className="bg-black/50 p-2 rounded-lg font-mono text-[10px] break-all border border-slate-700 text-cyan-200">
-                <span className="text-slate-400 block mb-0.5 font-sans font-bold">MÃ BĂM SHA-256:</span>
+                <span className="text-slate-400 block mb-0.5 font-sans font-bold">MÃ BĂM SNAPSHOT SHA-256:</span>
                 {evidence.sha256}
               </div>
-              <div className="pt-1 flex items-center space-x-2">
+              <div className="pt-0.5 flex items-center space-x-2">
                 <a
                   href={evidence.evidenceUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center space-x-1 text-cyan-300 hover:underline font-bold text-xs"
                 >
-                  <span>Xem ảnh bằng chứng niêm phong</span>
+                  <span>Xem ảnh chụp hồ sơ niêm phong</span>
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
             </div>
+          )}
+
+          {/* Option 3: Evidence Vault Offline Media File */}
+          {evidence?.vault?.isVaultArchived ? (
+            <div className="bg-slate-900/80 p-2.5 rounded-lg border border-indigo-500/40 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between text-emerald-400 font-bold">
+                <span className="flex items-center space-x-1">
+                  <HardDrive className="w-3.5 h-3.5" />
+                  <span>Kho Bằng Chứng Số: ĐÃ LƯU TRỮ VĨNH VIỄN</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">{evidence.vault.fileSizeFormatted}</span>
+              </div>
+              <div className="bg-black/60 p-2 rounded font-mono text-[10px] text-emerald-300 break-all">
+                <span className="text-slate-400 block font-sans font-bold">MÃ BĂM TỆP GỐC SHA-256:</span>
+                {evidence.vault.mediaSha256}
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] text-slate-400">Lưu lúc: {evidence.vault.archivedAt}</span>
+                <a
+                  href={evidence.vault.vaultUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  download
+                  className="inline-flex items-center space-x-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[10px] font-bold transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Tải Tệp Vault Gốc</span>
+                </a>
+              </div>
+            </div>
           ) : (
-            <div className="pt-1">
-              <p className="text-[11px] text-slate-300 mb-2 leading-relaxed">
-                Tự động chụp bản chụp màn hình pháp lý và tạo mã băm SHA-256 để chống cơ sở xóa bài phi tang trước khi thanh tra.
+            <div className="pt-1 space-y-2">
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Tự động chụp bản chụp màn hình và tải lưu trữ vĩnh viễn tệp ảnh/video vào Kho Bằng Chứng Số (Vault) để chống cơ sở xóa bài phi tang.
               </p>
-              <button
-                onClick={handleCaptureEvidence}
-                disabled={isCapturing}
-                className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white rounded-lg font-bold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 text-xs"
-              >
-                {isCapturing ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Đang chụp &amp; băm SHA-256...</span>
-                  </>
-                ) : (
-                  <>
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Chụp Bằng Chứng &amp; Khóa Mã SHA-256</span>
-                  </>
-                )}
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  onClick={handleCaptureEvidence}
+                  disabled={isCapturing}
+                  className="py-2 px-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white rounded-lg font-bold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 text-[11px]"
+                >
+                  {isCapturing ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Đang chụp...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-3 h-3" />
+                      <span>1. Chụp Bằng Chứng Số</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleArchiveVault}
+                  disabled={isArchivingVault}
+                  className="py-2 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-lg font-bold flex items-center justify-center space-x-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50 text-[11px]"
+                >
+                  {isArchivingVault ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>Đang lưu Vault...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="w-3 h-3" />
+                      <span>2. Khóa Vào Kho Vault</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>

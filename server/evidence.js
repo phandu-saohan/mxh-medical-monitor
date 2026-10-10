@@ -7,9 +7,13 @@ import { updateViolation, getViolations } from './db.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const EVIDENCE_DIR = path.join(__dirname, '..', 'data', 'evidence');
+const VAULT_DIR = path.join(__dirname, '..', 'data', 'evidence_vault');
 
 if (!fs.existsSync(EVIDENCE_DIR)) {
   fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+}
+if (!fs.existsSync(VAULT_DIR)) {
+  fs.mkdirSync(VAULT_DIR, { recursive: true });
 }
 
 /**
@@ -17,6 +21,81 @@ if (!fs.existsSync(EVIDENCE_DIR)) {
  */
 export function calculateSha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Tải và niêm phong tệp tin gốc (hình ảnh / video / clip) vào Kho Bằng Chứng Số Bất Khả Biến (Evidence Vault)
+ * Chống xóa bài phi tang trước khi đoàn kiểm tra làm việc.
+ */
+export async function archiveMediaToVault(violationId, explicitMediaUrl = null) {
+  const violations = getViolations();
+  const item = violations.find(v => v.id === violationId);
+  if (!item) {
+    throw new Error('Không tìm thấy hồ sơ vi phạm để niêm phong.');
+  }
+
+  const targetUrl = explicitMediaUrl || item.mediaUrl || item.avatar;
+  if (!targetUrl) {
+    throw new Error('Hồ sơ không có tệp đa phương tiện (ảnh/video) để niêm phong vào Vault.');
+  }
+
+  const now = new Date();
+  const timestampIso = now.toISOString();
+  const formattedTime = `${now.toLocaleDateString('vi-VN')} ${now.toLocaleTimeString('vi-VN')}`;
+
+  let mediaBuffer = null;
+  let ext = '.jpg';
+
+  if (targetUrl.startsWith('data:')) {
+    const parts = targetUrl.split(',');
+    mediaBuffer = Buffer.from(parts[1], 'base64');
+    if (targetUrl.includes('image/png')) ext = '.png';
+    else if (targetUrl.includes('image/webp')) ext = '.webp';
+  } else if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+    const resp = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    if (!resp.ok) {
+      throw new Error(`Không thể tải tệp từ liên kết gốc: HTTP ${resp.status}`);
+    }
+    const arrayBuf = await resp.arrayBuffer();
+    mediaBuffer = Buffer.from(arrayBuf);
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('video/mp4')) ext = '.mp4';
+    else if (contentType.includes('image/png')) ext = '.png';
+    else if (contentType.includes('image/webp')) ext = '.webp';
+  } else {
+    throw new Error('Định dạng liên kết phương tiện không được hỗ trợ.');
+  }
+
+  const mediaSha256 = calculateSha256(mediaBuffer);
+  const vaultFilename = `vault_${violationId}_${Date.now()}${ext}`;
+  const vaultPath = path.join(VAULT_DIR, vaultFilename);
+
+  fs.writeFileSync(vaultPath, mediaBuffer);
+
+  const vaultRecord = {
+    isVaultArchived: true,
+    vaultFilename,
+    vaultUrl: `/api/evidence/vault/${vaultFilename}`,
+    mediaSha256,
+    fileSizeBytes: mediaBuffer.length,
+    fileSizeFormatted: `${(mediaBuffer.length / 1024).toFixed(1)} KB`,
+    archivedAt: formattedTime,
+    timestampIso,
+    originalMediaUrl: targetUrl,
+    sealOfficer: 'Tổ Trưởng Giám Sát Chuyên Trách Sở Y Tế'
+  };
+
+  const updatedEvidence = {
+    ...(item.evidence || {}),
+    vault: vaultRecord
+  };
+
+  updateViolation(violationId, { evidence: updatedEvidence });
+  return vaultRecord;
 }
 
 /**
