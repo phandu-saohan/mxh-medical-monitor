@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { analyzeContentWithAi } from './analyzer.js';
+import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation } from './db.js';
 
 /**
@@ -192,6 +193,14 @@ export async function scanTikTokAestheticVideos(options = {}) {
   for (let i = 0; i < scrapedVideos.length; i++) {
     const v = scrapedVideos[i];
 
+    // Tự động đọc chữ & nội dung in trên video / bìa clip TikTok (AI Vision OCR)
+    let autoOcrText = null;
+    if (v.mediaUrl && typeof v.mediaUrl === 'string' && v.mediaUrl.startsWith('http')) {
+      try {
+        autoOcrText = await extractOcrFromImageUrl(v.mediaUrl);
+      } catch {}
+    }
+
     // Gửi sang Model Gemini AI phân tích vi phạm thẩm mỹ & trách nhiệm của KOL
     const analysis = await analyzeContentWithAi({
       content: v.content,
@@ -199,7 +208,7 @@ export async function scanTikTokAestheticVideos(options = {}) {
       postType: 'Video ngắn (TikTok)',
       mediaUrl: v.mediaUrl,
       isPage: false,
-      ocrText: null
+      ocrText: autoOcrText
     });
 
     if (analysis.isViolation) {

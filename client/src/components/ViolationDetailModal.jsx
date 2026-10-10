@@ -63,6 +63,25 @@ export default function ViolationDetailModal({
         .then((data) => setLicenseCheck(data))
         .catch(() => {});
     }
+
+    // TỰ ĐỘNG ĐỌC VÀ BÓC TÁCH CHỮ TỪ HÌNH ẢNH / VIDEO (KHÔNG CẦN CHỜ ĐỒNG Ý)
+    const targetImg = item?.mediaUrl || item?.avatar;
+    if (!item?.ocrText && targetImg && targetImg.startsWith('http')) {
+      setIsScanningOcr(true);
+      fetch('/api/ocr/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: targetImg })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.text) {
+            setOcrText(data.text);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsScanningOcr(false));
+    }
   }, [item]);
 
   const handleScanOcr = async () => {
@@ -215,42 +234,39 @@ export default function ViolationDetailModal({
           )}
         </div>
 
-        {/* Multimodal AI Vision OCR Action & Result (Mô-đun 2) */}
+        {/* Multimodal AI Vision OCR Action & Result (Mô-đun 2: Tự động 100%) */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
           <div className="flex items-center justify-between">
             <span className="font-bold flex items-center space-x-1.5 text-indigo-700 text-[11px]">
               <ScanText className="w-3.5 h-3.5 text-indigo-600" />
-              <span>AI Vision OCR: Quét Chữ &amp; Bìa Ảnh (Mô-đun 2)</span>
+              <span>AI Vision OCR: Tự Động Đọc Chữ Ảnh &amp; Video (Không cần xác nhận)</span>
             </span>
-            <button
-              onClick={handleScanOcr}
-              disabled={isScanningOcr}
-              className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-bold flex items-center space-x-1 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              {isScanningOcr ? (
-                <>
+            <div className="flex items-center space-x-1.5">
+              {isScanningOcr && (
+                <span className="text-[10px] text-indigo-600 flex items-center space-x-1 font-semibold animate-pulse">
                   <RefreshCw className="w-3 h-3 animate-spin" />
-                  <span>Đang quét ảnh...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3" />
-                  <span>{ocrText ? 'Quét lại OCR' : 'Quét chữ trong ảnh'}</span>
-                </>
+                  <span>Đang tự động đọc...</span>
+                </span>
               )}
-            </button>
+              {ocrText && !isScanningOcr && (
+                <span className="text-[10px] text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full font-bold flex items-center space-x-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Đã tự động đọc</span>
+                </span>
+              )}
+            </div>
           </div>
 
           {ocrText ? (
             <div className="bg-white p-2.5 rounded-lg border border-indigo-100 text-[11px] text-slate-700 space-y-1">
               <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
-                Nội dung phát hiện trong ảnh:
+                Nội dung tự động bóc tách từ hình ảnh / video:
               </div>
               <p className="whitespace-pre-line leading-relaxed">{ocrText}</p>
             </div>
           ) : (
             <div className="text-[10px] text-slate-400">
-              Chưa quét OCR. Nhấn nút để bóc tách các slogan, cam kết lén lút, hotline hoặc hình ảnh Before-After in trên banner ảnh.
+              {isScanningOcr ? 'Hệ thống đang tự động trích xuất chữ và hình ảnh Before/After qua Google Gemini Multimodal Vision...' : 'Bài viết không chứa tệp hình ảnh/video hoặc đã quét xong.'}
             </div>
           )}
         </div>

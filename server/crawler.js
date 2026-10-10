@@ -4,6 +4,7 @@ import fs from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
+import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation, getViolations, incrementScannedCount } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -550,7 +551,24 @@ export async function runScrapeAndInspect(options = {}) {
 
     for (let i = 0; i < finalItems.length; i++) {
       const p = finalItems[i];
-      const analysis = await analyzeContentWithAi(p);
+
+      // TỰ ĐỘNG ĐỌC VÀ BÓC TÁCH CHỮ/HÌNH ẢNH/BANNER/VIDEO BẰNG AI MULTIMODAL OCR (KHÔNG CẦN CHỜ ĐỒNG Ý)
+      let autoOcrText = p.ocrText || null;
+      if (!autoOcrText && p.mediaUrl && typeof p.mediaUrl === 'string' && p.mediaUrl.startsWith('http')) {
+        try {
+          autoOcrText = await extractOcrFromImageUrl(p.mediaUrl);
+          if (autoOcrText) {
+            logMessage(`[AI Vision Tự Động] Đã quét chữ & hình ảnh bài viết của "${p.author}": ${autoOcrText.slice(0, 100)}...`, 'info');
+          }
+        } catch (e) {
+          // Bỏ qua lỗi OCR để tiếp tục quy trình
+        }
+      }
+
+      const analysis = await analyzeContentWithAi({
+        ...p,
+        ocrText: autoOcrText
+      });
 
       if (analysis.isViolation) {
         const item = {
@@ -563,6 +581,7 @@ export async function runScrapeAndInspect(options = {}) {
           followers: p.followers || (p.isPage ? 'Fanpage FB' : 'Hội Nhóm FB'),
           avatar: p.mediaUrl || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&h=120&q=80',
           content: p.content,
+          ocrText: autoOcrText,
           postType: p.postType,
           postUrl: p.postUrl,
           mediaUrl: p.mediaUrl,

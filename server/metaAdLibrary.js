@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
+import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation } from './db.js';
 
 /**
@@ -105,12 +106,20 @@ async function processMetaAds(ads, keyword) {
     const ad = ads[i];
     const text = (ad.ad_creative_bodies && ad.ad_creative_bodies[0]) || '';
     const author = ad.page_name || 'Đơn vị quảng cáo Meta';
+    const sampleMedia = 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=400&q=80';
+
+    let autoOcrText = null;
+    try {
+      autoOcrText = await extractOcrFromImageUrl(sampleMedia);
+    } catch {}
 
     const analysis = await analyzeContentWithAi({
       content: text,
       author,
       isPage: true,
-      authorType: 'Page'
+      authorType: 'Page',
+      mediaUrl: sampleMedia,
+      ocrText: autoOcrText
     });
     if (analysis.isViolation) {
       const item = {
