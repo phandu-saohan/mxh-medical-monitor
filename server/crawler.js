@@ -231,7 +231,8 @@ export async function openBrowserForLogin() {
 }
 
 /**
- * Step 2, 3, 4 (PRODUCTION): Rà soát thật 100% trên Facebook (Không dùng dữ liệu sandbox giả lập)
+ * Làm sạch chuỗi văn bản Facebook
+ */
 export function cleanFacebookText(rawText, author = '') {
   if (!rawText || typeof rawText !== 'string') return '';
   let text = rawText;
