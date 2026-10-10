@@ -1,10 +1,12 @@
 /**
- * Legal Compliance Rule Engine for Healthcare and Medical Advertising Monitoring
- * Based on:
- * - Luật Khám bệnh, chữa bệnh số 15/2023/QH15
+ * Legal Compliance Rule Engine for Healthcare and Medical Advertising Monitoring in Vietnam
+ * Căn cứ pháp lý cập nhật mới nhất:
+ * - Luật Khám bệnh, chữa bệnh số 15/2023/QH15 (Có hiệu lực từ 01/01/2024)
+ * - Nghị định số 96/2023/NĐ-CP quy định chi tiết Luật Khám bệnh, chữa bệnh 2023
  * - Luật Quảng cáo số 16/2012/QH13
- * - Nghị định 117/2020/NĐ-CP (Xử phạt vi phạm hành chính trong lĩnh vực y tế)
- * - Nghị định 38/2021/NĐ-CP (Xử phạt vi phạm hành chính trong lĩnh vực văn hóa và quảng cáo)
+ * - Nghị định số 117/2020/NĐ-CP & Nghị định số 124/2021/NĐ-CP (Xử phạt VPHC trong lĩnh vực Y tế)
+ * - Nghị định số 38/2021/NĐ-CP & Nghị định số 128/2022/NĐ-CP (Xử phạt VPHC trong lĩnh vực Văn hóa & Quảng cáo)
+ * - Cơ chế chuyển đổi từ tiền kiểm sang HẬU KIỂM toàn diện trên không gian mạng
  */
 
 export const VIOLATION_CATEGORIES = {
@@ -22,20 +24,22 @@ export const LEGAL_RULES = [
       'nâng mũi', 'cắt mí', 'hút mỡ', 'tiêm filler', 'tiêm botox', 
       'nâng ngực', 'căng da chỉ', 'căng chỉ collagen', 'tiêm meso', 
       'gọt cằm', 'độn thái dương', 'tiêm tan mỡ', 'phẫu thuật thẩm mỹ', 
-      'nâng cung mày', 'bóc mỡ mắt', 'tạo hình thành bụng', 'truyền trắng'
+      'nâng cung mày', 'bóc mỡ mắt', 'tạo hình thành bụng', 'truyền trắng',
+      'cắt môi trái tim', 'độn cằm vline', 'cấy mỡ tự thân', 'hút mỡ siết eo'
     ],
     exemptions: ['bệnh viện đa khoa', 'bệnh viện thẩm mỹ', 'phòng khám chuyên khoa thẩm mỹ'],
     legalBasis: [
-      'Điều 19, 83 Luật Khám bệnh, chữa bệnh số 15/2023/QH15: Dịch vụ phẫu thuật, can thiệp xâm lấn chỉ được thực hiện tại cơ sở KCB được cấp giấy phép hoạt động.',
-      'Điều 39 Nghị định 117/2020/NĐ-CP: Phạt 40 - 50 triệu đồng đối với hành vi cung cấp dịch vụ khám bệnh, chữa bệnh mà không có giấy phép hoạt động.',
-      'Khoản 1 Điều 56 Nghị định 38/2021/NĐ-CP: Phạt 30 - 40 triệu đồng đối với hành vi quảng cáo dịch vụ khám bệnh, chữa bệnh khi chưa có giấy phép hoạt động.'
+      'Điều 19, Điều 83 Luật Khám bệnh, chữa bệnh số 15/2023/QH15: Nghiêm cấm quảng cáo dịch vụ KCB khi chưa có Giấy phép hoạt động hoặc vượt quá phạm vi chuyên môn được phê duyệt.',
+      'Khoản 2 Điều 37 & Điều 38 Nghị định số 96/2023/NĐ-CP: Cơ sở dịch vụ thẩm mỹ (spa, chăm sóc da) KHÔNG ĐƯỢC phép thực hiện hoặc quảng cáo dịch vụ can thiệp xâm lấn (tiêm, truyền, phẫu thuật, thủ thuật dùng thuốc gây tê dạng tiêm).',
+      'Khoản 6 Điều 39 Nghị định số 117/2020/NĐ-CP (sửa đổi bởi NĐ 124/2021/NĐ-CP): Phạt tiền từ 40 - 50 triệu đồng và đình chỉ hoạt động 12 - 24 tháng đối với hành vi cung cấp dịch vụ KCB không có giấy phép hoặc vượt quá phạm vi.',
+      'Khoản 1 & Khoản 2 Điều 56 Nghị định số 38/2021/NĐ-CP: Phạt tiền từ 30 - 40 triệu đồng đối với hành vi quảng cáo dịch vụ KCB khi chưa có giấy phép hoặc vượt quá phạm vi chuyên môn; buộc tháo gỡ/xóa quảng cáo.'
     ],
     severity: 'Cao',
     recommendations: [
-      'Gửi văn bản cảnh báo cho nền tảng mạng xã hội (Facebook)',
-      'Liên hệ yêu cầu gỡ bỏ ngay nội dung quảng cáo vi phạm',
-      'Xác minh thông tin đăng ký kinh doanh và giấy phép cơ sở/đơn vị',
-      'Lập hồ sơ chuyển Thanh tra Sở Y tế kiểm tra đột xuất tại địa chỉ cơ sở'
+      'Lập biên bản vi phạm hành chính chuyển Thanh tra Sở Y tế kiểm tra đột xuất tại cơ sở',
+      'Yêu cầu cơ sở gỡ bỏ ngay lập tức nội dung quảng cáo vi phạm trên trang mạng xã hội',
+      'Đình chỉ hoạt động dịch vụ thẩm mỹ xâm lấn trái phép theo quy định tại Nghị định 117/2020/NĐ-CP',
+      'Chuyển cơ quan Công an và Quản lý thị trường phối hợp nếu có dấu hiệu hành nghề y trái phép gây hậu quả nghiêm trọng'
     ]
   },
   {
@@ -44,17 +48,18 @@ export const LEGAL_RULES = [
       'cam kết 100%', 'cam kết khỏi', 'vĩnh viễn', 'không sưng không đau', 
       'đẹp ngay sau khi làm', 'chữa dứt điểm 100%', 'khỏi hẳn sau 1 liệu trình', 
       'trẻ hóa tức thì 10 tuổi', 'hiệu quả trọn đời', 'không biến chứng', 'an toàn tuyệt đối',
-      'hồi sinh làn da 100%', 'đánh bay nám vĩnh viễn'
+      'hồi sinh làn da 100%', 'đánh bay nám vĩnh viễn', 'không đau 100%', 'đẹp tự nhiên trọn đời'
     ],
     legalBasis: [
-      'Khoản 9 Điều 8 Luật Quảng cáo số 16/2012/QH13: Nghiêm cấm quảng cáo không đúng hoặc gây nhầm lẫn về khả năng kinh doanh, khả năng cung cấp sản phẩm, hàng hóa, dịch vụ.',
-      'Khoản 2 Điều 34 Nghị định 38/2021/NĐ-CP: Phạt tiền từ 10 - 20 triệu đồng đối với hành vi quảng cáo có sử dụng các từ ngữ mang tính cam kết khẳng định tuyệt đối mà không có tài liệu chứng minh.'
+      'Khoản 9 Điều 8 Luật Quảng cáo số 16/2012/QH13: Nghiêm cấm quảng cáo không đúng hoặc gây nhầm lẫn về khả năng kinh doanh, khả năng cung cấp sản phẩm, dịch vụ.',
+      'Khoản 2 Điều 34 Nghị định số 38/2021/NĐ-CP: Phạt tiền từ 10 - 20 triệu đồng đối với hành vi quảng cáo sử dụng các từ ngữ mang tính cam kết khẳng định tuyệt đối mà không có tài liệu chứng minh hợp pháp.',
+      'Nghị định số 96/2023/NĐ-CP: Mọi thông tin y tế, điều trị phải đảm bảo tính khoa học, khách quan, không được cam kết kết quả điều trị tuyệt đối.'
     ],
     severity: 'Trung bình',
     recommendations: [
-      'Yêu cầu cơ sở cung cấp chứng nhận kiểm định lâm sàng hoặc tài liệu khoa học chứng minh',
-      'Lập biên bản yêu cầu đính chính thông tin gây ngộ nhận cho người tiêu dùng',
-      'Khuyến cáo người dân cảnh giác với các cam kết quá đà trên mạng xã hội'
+      'Yêu cầu cơ sở xuất trình bằng chứng kiểm định lâm sàng hoặc tài liệu khoa học được Bộ Y tế công nhận',
+      'Buộc cải chính thông tin công khai trên Fanpage/Kênh truyền thông đã đăng tải',
+      'Xử phạt hành chính hành vi quảng cáo gây ngộ nhận cho người tiếp cận dịch vụ'
     ]
   },
   {
@@ -62,17 +67,18 @@ export const LEGAL_RULES = [
     keywords: [
       'trước và sau', 'before after', 'hình ảnh thực tế khách hàng', 
       'khách hàng sau 7 ngày', 'thay đổi ngoạn mục', 'hình ảnh feedback', 
-      'ảnh khách vừa làm xong', 'feedback khách làm'
+      'ảnh khách vừa làm xong', 'feedback khách làm', 'lột xác ngoạn mục', 'ảnh chụp tại bàn mổ'
     ],
     legalBasis: [
-      'Khoản 1 Điều 56 Nghị định 38/2021/NĐ-CP & Thông tư 09/2015/TT-BYT: Cấm sử dụng hình ảnh, thư cảm ơn, lời cảm ơn của người bệnh để quảng cáo dịch vụ khám bệnh, chữa bệnh.',
-      'Khoản 5 Điều 51 Nghị định 38/2021/NĐ-CP: Phạt tiền từ 20 - 30 triệu đồng đối với hành vi sử dụng hình ảnh mang tính so sánh phóng đại hiệu quả trước và sau khi can thiệp.'
+      'Khoản 1 Điều 56 Nghị định số 38/2021/NĐ-CP: Nghiêm cấm sử dụng hình ảnh, thư cảm ơn, lời cảm ơn của người bệnh để quảng cáo dịch vụ khám bệnh, chữa bệnh.',
+      'Khoản 5 Điều 51 Nghị định số 38/2021/NĐ-CP: Phạt tiền từ 20 - 30 triệu đồng đối với hành vi sử dụng hình ảnh mang tính so sánh phóng đại hiệu quả trước và sau khi can thiệp.',
+      'Quy định bảo vệ dữ liệu cá nhân y tế tại Luật KCB 15/2023/QH15: Không được sử dụng hình ảnh hồ sơ bệnh án hoặc hình ảnh riêng tư của khách hàng/người bệnh khi chưa có sự đồng ý bằng văn bản.'
     ],
     severity: 'Trung bình',
     recommendations: [
-      'Xác minh tính xác thực của hình ảnh với người mẫu/bệnh nhân',
-      'Kiểm tra hành vi chỉnh sửa ảnh (Photoshop/AI) làm sai lệch kết quả thực tế',
-      'Yêu cầu gỡ bỏ hình ảnh bệnh nhân chưa được cho phép hoặc trái quy định'
+      'Xác minh tính xác thực của hình ảnh khách hàng; kiểm tra hành vi chỉnh sửa ảnh bằng phần mềm hoặc AI',
+      'Buộc gỡ bỏ hình ảnh bệnh nhân/khách hàng khỏi toàn bộ các nền tảng số',
+      'Lập biên bản xử phạt theo Khoản 1 Điều 56 Nghị định 38/2021/NĐ-CP'
     ]
   },
   {
@@ -80,18 +86,19 @@ export const LEGAL_RULES = [
     keywords: [
       'bác sĩ chuyên khoa', 'chuyên gia hàng đầu', 'bác sĩ tu nghiệp hàn quốc', 
       'thiết bị đạt chuẩn fda', 'phòng mổ vô trùng quốc tế', 'viện thẩm mỹ quốc tế', 
-      'chuyển giao công nghệ hoa kỳ', 'bác sĩ thẩm mỹ 20 năm kinh nghiệm'
+      'chuyển giao công nghệ hoa kỳ', 'bác sĩ thẩm mỹ 20 năm kinh nghiệm', 'chuyên gia phẫu thuật',
+      'đào tạo học viên cấp bằng', 'chuyển giao công nghệ thẩm mỹ'
     ],
     legalBasis: [
-      'Điều 20 Luật Quảng cáo số 16/2012/QH13: Quảng cáo dịch vụ khám bệnh, chữa bệnh phải có giấy phép hoạt động và chứng chỉ hành nghề của người hành nghề.',
-      'Điều 56 Nghị định 38/2021/NĐ-CP: Phạt tiền từ 15 - 20 triệu đồng đối với hành vi quảng cáo dịch vụ KCB mà không ghi rõ số giấy phép hoạt động khám bệnh, chữa bệnh, phạm vi hoạt động chuyên môn.',
-      'Điều 40 Nghị định 117/2020/NĐ-CP: Xử phạt hành vi mạo danh bác sĩ hoặc sử dụng chứng chỉ hành nghề giả.'
+      'Điều 20 Luật Quảng cáo số 16/2012/QH13: Quảng cáo dịch vụ khám bệnh, chữa bệnh phải có Giấy phép hoạt động và Chứng chỉ hành nghề / Giấy phép hành nghề của người hành nghề.',
+      'Khoản 4 Điều 56 Nghị định số 38/2021/NĐ-CP: Phạt tiền từ 15 - 20 triệu đồng đối với hành vi quảng cáo dịch vụ KCB mà không thể hiện đầy đủ tên cơ sở, địa chỉ, số giấy phép hoạt động khám bệnh, chữa bệnh và phạm vi hoạt động chuyên môn.',
+      'Điều 40 Nghị định số 117/2020/NĐ-CP (sửa đổi bởi NĐ 124/2021/NĐ-CP): Xử phạt hành vi mạo danh bác sĩ, sử dụng danh xưng chuyên gia y tế trái phép hoặc sử dụng giấy phép giả mạo.'
     ],
     severity: 'Cao',
     recommendations: [
-      'Tra cứu Cơ sở dữ liệu Quốc gia về người hành nghề khám chữa bệnh để xác minh danh tính bác sĩ',
-      'Kiểm tra giấy phép phòng khám và danh mục kỹ thuật được Sở Y tế phê duyệt',
-      'Phối hợp với Công an địa phương nếu phát hiện hành vi giả mạo danh xưng bác sĩ'
+      'Đối soát qua Cổng thông tin Quản lý người hành nghề khám chữa bệnh của Bộ Y tế / Sở Y tế địa phương',
+      'Kiểm tra tính pháp lý của danh xưng "Viện Thẩm Mỹ Quốc Tế" hoặc "Bệnh Viện Thẩm Mỹ"',
+      'Chuyển cơ quan điều tra nếu phát hiện hành vi làm giả bằng cấp, chứng chỉ hành nghề y tế'
     ]
   }
 ];

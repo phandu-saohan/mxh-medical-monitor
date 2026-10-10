@@ -290,7 +290,7 @@ export async function runScrapeAndInspect(options = {}) {
 
   logMessage(`[PRODUCTION] Khởi động rà soát mạng xã hội với từ khóa y tế: "${keyword}" (Mục tiêu: ${maxPosts} mục)`, 'info');
   logMessage('Chiến lược: ƯU TIÊN RÀ SOÁT CÁC TRANG (FANPAGE) TRƯỚC HỘI NHÓM (GROUPS)', 'info');
-  logMessage('Căn cứ pháp lý: Luật KCB 15/2023/QH15, Luật QC 16/2012, NĐ 117/2020/NĐ-CP, NĐ 38/2021/NĐ-CP', 'info');
+  logMessage('Căn cứ pháp lý: Luật KCB 15/2023/QH15, NĐ 96/2023/NĐ-CP, Luật QC 16/2012, NĐ 117/2020/NĐ-CP, NĐ 38/2021/NĐ-CP', 'info');
 
   let browserContext = activeBrowserContext;
   let createdOwnContext = false;
