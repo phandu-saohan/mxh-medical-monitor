@@ -514,7 +514,23 @@ Viện Thẩm mỹ Quốc tế Thu Cúc,00456/BYT-GPHĐ,Bộ Y tế,Hà Nội,B�
   res.send('\uFEFF' + sampleCsv); // prepend UTF-8 BOM
 });
 
-// Helper: Save environment variables to .env
+// Initialize persistent AI configuration from data/ai_config.json or .env
+const AI_CONFIG_FILE = path.join(__dirname, '../data/ai_config.json');
+try {
+  if (fs.existsSync(AI_CONFIG_FILE)) {
+    const savedAi = JSON.parse(fs.readFileSync(AI_CONFIG_FILE, 'utf8'));
+    if (savedAi.apiKey && !process.env.GEMINI_API_KEY) {
+      process.env.GEMINI_API_KEY = savedAi.apiKey;
+    }
+    if (savedAi.model && !process.env.GEMINI_MODEL) {
+      process.env.GEMINI_MODEL = savedAi.model;
+    }
+  }
+} catch (e) {
+  console.warn('[AI Config Init Warning]:', e.message);
+}
+
+// Helper: Save environment variables to .env and data/ai_config.json
 function updateEnvFile(updates) {
   const envPath = path.join(__dirname, '../.env');
   let content = '';
@@ -536,6 +552,18 @@ function updateEnvFile(updates) {
     newLines.push(`${key}=${updates[key]}`);
   }
   fs.writeFileSync(envPath, newLines.filter(Boolean).join('\n') + '\n', 'utf8');
+
+  // Also persist to /data volume so it survives Docker redeploys/restarts
+  try {
+    const aiData = {
+      apiKey: updates.GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? '',
+      model: updates.GEMINI_MODEL ?? process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      updatedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(AI_CONFIG_FILE, JSON.stringify(aiData, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[AI Config Write Warning]:', e.message);
+  }
 }
 
 // API: Get Gemini AI Configuration
@@ -545,15 +573,15 @@ app.get('/api/settings/ai', (req, res) => {
   res.json({
     hasKey: Boolean(key),
     maskedKey,
-    model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-    status: Boolean(key) ? 'Đã kích hoạt Google Gemini AI' : 'Chưa cấu hình (Đang dùng Heuristic Engine nội bộ)'
+    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    status: Boolean(key) ? 'Đã kích hoạt Google Gemini AI (Tự động lưu vĩnh viễn trong env/data)' : 'Chưa cấu hình (Đang dùng Heuristic Engine nội bộ)'
   });
 });
 
 // API: Save & Test Gemini AI Configuration
 app.post('/api/settings/ai', async (req, res) => {
   try {
-    const { apiKey, model = 'gemini-3.8-flash' } = req.body;
+    const { apiKey, model = 'gemini-2.5-flash' } = req.body;
     
     // If empty apiKey, clear it
     if (!apiKey || apiKey.trim() === '') {
@@ -588,7 +616,7 @@ app.post('/api/settings/ai', async (req, res) => {
       });
     }
 
-    // Save to process.env and .env file
+    // Save to process.env and .env file and persistent volume
     process.env.GEMINI_API_KEY = trimmedKey;
     process.env.GEMINI_MODEL = model;
     updateEnvFile({
@@ -601,7 +629,7 @@ app.post('/api/settings/ai', async (req, res) => {
       hasKey: true,
       maskedKey: `${trimmedKey.substring(0, 6)}...${trimmedKey.substring(trimmedKey.length - 4)}`,
       model,
-      message: `Kết nối thành công tới mô hình ${model}! Đã lưu cấu hình an toàn vào máy chủ.`
+      message: `Kết nối thành công tới mô hình ${model}! Đã lưu vĩnh viễn vào hệ thống (không cần nhập lại mỗi lần mở).`
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
