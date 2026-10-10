@@ -1,5 +1,5 @@
 # Production Dockerfile for Medical Social Media Compliance Monitoring App
-FROM mcr.microsoft.com/playwright:v1.45.0-jammy
+FROM mcr.microsoft.com/playwright:v1.64.0-jammy
 
 WORKDIR /app
 
