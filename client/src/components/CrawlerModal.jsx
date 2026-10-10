@@ -15,7 +15,11 @@ import {
   Sparkles,
   CalendarClock,
   Clock,
-  Cpu
+  Cpu,
+  BookOpen,
+  FolderOpen,
+  Tag,
+  ChevronDown
 } from 'lucide-react';
 
 export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
@@ -43,6 +47,11 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   const [cookieInput, setCookieInput] = useState('');
   const [isSavingCookies, setIsSavingCookies] = useState(false);
 
+  // Kho từ khóa & chuyên mục (Database Keywords state)
+  const [dbKeywords, setDbKeywords] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('Tất cả');
+  const [showKeywordVault, setShowKeywordVault] = useState(false);
+
   const quickKeywords = [
     'nâng mũi cấu trúc',
     'tiêm filler giá sinh viên',
@@ -54,7 +63,7 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
     'truyền trắng phi thuyền'
   ];
 
-  // Fetch status, scheduler config & listen to SSE
+  // Fetch status, scheduler config, keywords & listen to SSE
   useEffect(() => {
     if (!isOpen) return;
 
@@ -72,6 +81,16 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
     fetch('/api/scheduler')
       .then((res) => res.json())
       .then((data) => setSchedulerConfig(data))
+      .catch(() => {});
+
+    // Lấy toàn bộ danh sách từ kho từ khóa để cán bộ chọn theo chuyên mục
+    fetch('/api/keywords')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setDbKeywords(data);
+        }
+      })
       .catch(() => {});
 
     const evtSource = new EventSource('/api/crawler/events');
@@ -378,41 +397,108 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                 {/* Bước 2 */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
                   <div>
-                    <div className="flex items-center space-x-1.5 mb-2 font-bold text-sm text-slate-800">
-                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold">2</span>
-                      <span>B2: Tự động điền từ khóa rà soát</span>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-1.5 font-bold text-sm text-slate-800">
+                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[11px] font-bold">2</span>
+                        <span>B2: Tự động điền từ khóa rà soát</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowKeywordVault(!showKeywordVault)}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                      >
+                        <FolderOpen className="w-3 h-3 text-indigo-500" />
+                        <span>{showKeywordVault ? 'Thu gọn Kho' : 'Mở Kho Từ Khóa Theo Chuyên Mục'}</span>
+                      </button>
                     </div>
+
                     <p className="text-slate-600 text-[11px] mb-2">
                       Tự động điền vào thanh tìm kiếm của Facebook, bóc tách các bài viết của Trang, Nhóm, Reels và Video.
                     </p>
-                    <div className="space-y-1.5">
-                      <label htmlFor="crawler-keyword-input" className="sr-only">Từ khóa y tế rà soát</label>
-                      <input
-                        id="crawler-keyword-input"
-                        name="keyword"
-                        type="text"
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        placeholder="Nhập từ khóa y tế..."
-                        aria-label="Nhập từ khóa y tế"
-                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                      />
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {quickKeywords.slice(0, 4).map((kw, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setKeyword(kw)}
-                            className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
-                              keyword === kw
-                                ? 'bg-blue-600 text-white border-blue-600 font-bold'
-                                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {kw}
-                          </button>
-                        ))}
+
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <label htmlFor="crawler-keyword-input" className="sr-only">Từ khóa y tế rà soát</label>
+                        <input
+                          id="crawler-keyword-input"
+                          name="keyword"
+                          type="text"
+                          value={keyword}
+                          onChange={(e) => setKeyword(e.target.value)}
+                          placeholder="Nhập hoặc chọn từ khóa y tế từ kho..."
+                          aria-label="Nhập từ khóa y tế"
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                        />
                       </div>
+
+                      {/* Kho Từ Khóa Theo Chuyên Mục (Mở rộng cho phép lấy trực tiếp từ kho) */}
+                      {showKeywordVault && (
+                        <div className="p-3 bg-white border border-indigo-200 rounded-xl space-y-2 shadow-xs animate-in fade-in">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-slate-700 flex items-center space-x-1">
+                              <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Chọn chuyên mục từ kho ({dbKeywords.length} từ khóa):</span>
+                            </span>
+                            <select
+                              value={selectedCategory}
+                              onChange={(e) => setSelectedCategory(e.target.value)}
+                              className="px-2 py-1 bg-slate-50 border border-slate-300 rounded-md text-[11px] font-semibold text-slate-800 cursor-pointer"
+                            >
+                              {Array.from(new Set(['Tất cả', ...dbKeywords.map(k => k.category).filter(Boolean)])).map((cat) => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="max-h-36 overflow-y-auto flex flex-wrap gap-1.5 p-1 bg-slate-50 rounded-lg border border-slate-200">
+                            {dbKeywords
+                              .filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory)
+                              .map((k) => (
+                                <button
+                                  key={k.id || k.term}
+                                  type="button"
+                                  onClick={() => {
+                                    setKeyword(k.term);
+                                  }}
+                                  className={`text-[10.5px] px-2 py-1 rounded-md border transition-all cursor-pointer flex items-center space-x-1 ${
+                                    keyword === k.term
+                                      ? 'bg-indigo-600 text-white border-indigo-600 font-bold shadow-xs'
+                                      : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50 hover:border-indigo-300'
+                                  }`}
+                                >
+                                  <span>{k.term}</span>
+                                  {k.category && (
+                                    <span className={`text-[9px] px-1 py-0.2 rounded font-normal ${
+                                      keyword === k.term ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-500'
+                                    }`}>
+                                      {k.category.split(' ')[0]}
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Gợi ý nhanh */}
+                      {!showKeywordVault && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {quickKeywords.slice(0, 6).map((kw, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setKeyword(kw)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                                keyword === kw
+                                  ? 'bg-blue-600 text-white border-blue-600 font-bold'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {kw}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
