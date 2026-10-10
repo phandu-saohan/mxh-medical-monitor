@@ -365,12 +365,12 @@ app.post('/api/crawler/save-cookies', (req, res) => {
   }
 });
 
-// API: Step 2, 3, 4 - Run Scraper & Legal Inspector
+// API: Step 2, 3, 4 - Run Scraper & Legal Inspector (Hỗ trợ từ khóa đơn HOẶC quét toàn bộ chuyên mục)
 app.post('/api/crawler/start', async (req, res) => {
   try {
-    const { keyword, maxPosts } = req.body;
+    const { keyword, keywords, categoryName, maxPosts } = req.body;
     // Run asynchronously, respond immediately with initial state
-    runScrapeAndInspect({ keyword, maxPosts }).catch(e => console.error('Crawler error:', e));
+    runScrapeAndInspect({ keyword, keywords, categoryName, maxPosts }).catch(e => console.error('Crawler error:', e));
     res.json({ success: true, message: 'Đã kích hoạt tiến trình rà soát.' });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -51,6 +51,7 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   const [dbKeywords, setDbKeywords] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('Tất cả');
   const [showKeywordVault, setShowKeywordVault] = useState(false);
+  const [scanMode, setScanMode] = useState('single'); // 'single' | 'category'
 
   const quickKeywords = [
     'nâng mũi cấu trúc',
@@ -104,6 +105,7 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
             setProgress(payload.status.progress);
             setCurrentStep(payload.status.step);
             setIsRunningScan(payload.status.isRunning);
+            setSessionStatus(payload.status);
           }
         } else if (payload.type === 'STATUS') {
           setSessionStatus(payload.status);
@@ -167,16 +169,33 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
     }
   };
 
-  // B2 - B4: Run Scrape & Inspect
-  const handleStartScan = async () => {
+  // B2 - B4: Run Scrape & Inspect (Hỗ trợ quét 1 từ khóa HOẶC quét hàng loạt theo chuyên mục)
+  const handleStartScan = async (overrideMode) => {
+    const activeMode = overrideMode || scanMode;
+    const categoryKeywords = dbKeywords
+      .filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory)
+      .map(k => k.term);
+
     setIsRunningScan(true);
     setProgress(5);
     setFoundItems([]);
+
+    const bodyPayload = activeMode === 'category'
+      ? {
+          keywords: categoryKeywords.length > 0 ? categoryKeywords : [keyword],
+          categoryName: selectedCategory,
+          maxPosts
+        }
+      : {
+          keyword,
+          maxPosts
+        };
+
     try {
       const res = await fetch('/api/crawler/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword, maxPosts })
+        body: JSON.stringify(bodyPayload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -308,19 +327,29 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
               {/* Progress Bar */}
               {isRunningScan && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
-                  <div className="flex justify-between font-bold text-blue-900">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between font-bold text-blue-900 gap-1">
                     <span className="flex items-center space-x-2">
                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
                       <span>Tiến trình rà soát trực tiếp: {currentStep}</span>
+                      {sessionStatus?.currentKeywordIndex && sessionStatus?.totalKeywords > 1 && (
+                        <span className="text-[11px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full border border-indigo-200">
+                          Từ khóa {sessionStatus.currentKeywordIndex}/{sessionStatus.totalKeywords}: "{sessionStatus.currentKeyword}"
+                        </span>
+                      )}
                     </span>
-                    <span>{progress}%</span>
+                    <span className="text-sm">{progress}%</span>
                   </div>
-                  <div className="w-full bg-blue-200 h-2 rounded-full overflow-hidden">
+                  <div className="w-full bg-blue-200 h-2.5 rounded-full overflow-hidden">
                     <div
-                      className="bg-blue-600 h-full transition-all duration-300 rounded-full"
+                      className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full transition-all duration-300 rounded-full"
                       style={{ width: `${progress}%` }}
                     ></div>
                   </div>
+                  {sessionStatus?.categoryName && (
+                    <div className="text-[10.5px] text-blue-700 font-semibold">
+                      ⚡ Đang quét gói chuyên mục: <span className="underline">{sessionStatus.categoryName}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -412,24 +441,77 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                       </button>
                     </div>
 
+                    {/* Mode Toggle: Đơn từ khóa VS Quét toàn bộ chuyên mục */}
+                    <div className="mb-2 p-1 bg-slate-200/80 rounded-lg flex text-[11px] font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setScanMode('single')}
+                        className={`flex-1 py-1 rounded-md transition-all text-center cursor-pointer ${
+                          scanMode === 'single'
+                            ? 'bg-white text-blue-700 shadow-xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Quét từ khóa đơn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setScanMode('category');
+                          setShowKeywordVault(true);
+                        }}
+                        className={`flex-1 py-1 rounded-md transition-all text-center cursor-pointer flex items-center justify-center space-x-1 ${
+                          scanMode === 'category'
+                            ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>⚡ Quét cả chuyên mục</span>
+                        <span className="text-[10px] bg-indigo-500/40 text-white px-1.5 py-0.2 rounded-full">
+                          {dbKeywords.filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory).length}
+                        </span>
+                      </button>
+                    </div>
+
                     <p className="text-slate-600 text-[11px] mb-2">
-                      Tự động điền vào thanh tìm kiếm của Facebook, bóc tách các bài viết của Trang, Nhóm, Reels và Video.
+                      {scanMode === 'category'
+                        ? `Hệ thống sẽ duyệt tuần tự tất cả ${dbKeywords.filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory).length} từ khóa trong chuyên mục "${selectedCategory}", khử trùng lặp và phân tích AI tự động.`
+                        : 'Tự động điền vào thanh tìm kiếm của Facebook, bóc tách các bài viết của Trang, Nhóm, Reels và Video.'}
                     </p>
 
                     <div className="space-y-2">
-                      <div className="relative">
-                        <label htmlFor="crawler-keyword-input" className="sr-only">Từ khóa y tế rà soát</label>
-                        <input
-                          id="crawler-keyword-input"
-                          name="keyword"
-                          type="text"
-                          value={keyword}
-                          onChange={(e) => setKeyword(e.target.value)}
-                          placeholder="Nhập hoặc chọn từ khóa y tế từ kho..."
-                          aria-label="Nhập từ khóa y tế"
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                        />
-                      </div>
+                      {scanMode === 'single' ? (
+                        <div className="relative">
+                          <label htmlFor="crawler-keyword-input" className="sr-only">Từ khóa y tế rà soát</label>
+                          <input
+                            id="crawler-keyword-input"
+                            name="keyword"
+                            type="text"
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            placeholder="Nhập hoặc chọn từ khóa y tế từ kho..."
+                            aria-label="Nhập từ khóa y tế"
+                            className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-2.5 bg-indigo-50/80 border border-indigo-200 rounded-lg text-[11px] flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-indigo-900">Chuyên mục đang chọn: </span>
+                            <span className="font-extrabold text-indigo-700 underline">{selectedCategory}</span>
+                            <span className="text-slate-500 ml-1.5">
+                              ({dbKeywords.filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory).length} từ khóa theo dõi)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowKeywordVault(true)}
+                            className="text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+                          >
+                            Đổi chuyên mục
+                          </button>
+                        </div>
+                      )}
 
                       {/* Kho Từ Khóa Theo Chuyên Mục (Mở rộng cho phép lấy trực tiếp từ kho) */}
                       {showKeywordVault && (
@@ -480,8 +562,8 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                         </div>
                       )}
 
-                      {/* Gợi ý nhanh */}
-                      {!showKeywordVault && (
+                      {/* Gợi ý nhanh (chỉ hiện khi quét đơn và chưa mở kho) */}
+                      {scanMode === 'single' && !showKeywordVault && (
                         <div className="flex flex-wrap gap-1 pt-0.5">
                           {quickKeywords.slice(0, 6).map((kw, i) => (
                             <button
@@ -532,18 +614,35 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                     <span>B3 &amp; B4: Đọc đa phương tiện &amp; Lập danh sách vi phạm</span>
                   </div>
                   <p className="text-xs text-slate-300 max-w-lg">
-                    Playwright tự động cuộn trang, đọc văn bản, ảnh, video, sau đó engine pháp luật đối chiếu với <strong>Luật Khám bệnh chữa bệnh 15/2023</strong> và <strong>Nghị định 117/2020</strong> để lập danh mục vi phạm cho giám sát viên.
+                    {scanMode === 'category' ? (
+                      <>Playwright tự động rà soát lần lượt các từ khóa trong <strong>chuyên mục "{selectedCategory}"</strong>, tự động đọc ảnh/video, đối soát <strong>Luật KCB 15/2023</strong> và lưu hồ sơ vi phạm.</>
+                    ) : (
+                      <>Playwright tự động cuộn trang, đọc văn bản, ảnh, video, sau đó engine pháp luật đối chiếu với <strong>Luật Khám bệnh chữa bệnh 15/2023</strong> và <strong>Nghị định 117/2020</strong> để lập danh mục vi phạm cho giám sát viên.</>
+                    )}
                   </p>
                 </div>
 
-                <button
-                  onClick={handleStartScan}
-                  disabled={isRunningScan}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-slate-950 font-black rounded-xl shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer disabled:opacity-50"
-                >
-                  <Play className="w-4 h-4 fill-slate-950" />
-                  <span>{isRunningScan ? 'Đang rà soát...' : 'KÍCH HOẠT RÀ SOÁT NGAY'}</span>
-                </button>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  {scanMode === 'category' ? (
+                    <button
+                      onClick={() => handleStartScan('category')}
+                      disabled={isRunningScan}
+                      className="px-6 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-black rounded-xl shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-4 h-4 fill-slate-950" />
+                      <span>{isRunningScan ? 'Đang quét toàn bộ...' : `QUÉT CẢ CHUYÊN MỤC (${dbKeywords.filter(k => selectedCategory === 'Tất cả' || k.category === selectedCategory).length} TỪ KHÓA)`}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleStartScan('single')}
+                      disabled={isRunningScan}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-slate-950 font-black rounded-xl shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center space-x-2 shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                      <Play className="w-4 h-4 fill-slate-950" />
+                      <span>{isRunningScan ? 'Đang rà soát...' : 'KÍCH HOẠT RÀ SOÁT NGAY'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Terminal Logs View */}

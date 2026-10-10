@@ -270,27 +270,54 @@ export function cleanFacebookText(rawText, author = '') {
 }
 
 /**
- * Step 2, 3, 4 (PRODUCTION): Rà soát thật 100% trên Facebook (Ưu tiên Page trước Group, số lượng kiểm tra 100)
+ * Step 2, 3, 4 (PRODUCTION): Rà soát thật 100% trên Facebook (Đơn từ khóa HOẶC Quét hàng loạt toàn bộ Chuyên mục)
  */
 export async function runScrapeAndInspect(options = {}) {
   const {
-    keyword = 'nâng mũi cấu trúc',
+    keyword,
+    keywords = [],
+    categoryName = '',
     maxPosts = 100
   } = options;
+
+  // Chuẩn hóa danh sách từ khóa: hỗ trợ cả đơn từ khóa lẫn danh sách chuyên mục
+  let keywordList = [];
+  if (Array.isArray(keywords) && keywords.length > 0) {
+    keywordList = keywords.map(k => (typeof k === 'string' ? k.trim() : k.term?.trim())).filter(Boolean);
+  } else if (keyword && typeof keyword === 'string' && keyword.trim()) {
+    keywordList = [keyword.trim()];
+  } else {
+    keywordList = ['nâng mũi cấu trúc'];
+  }
+
+  // Loại bỏ từ khóa trùng lặp
+  keywordList = [...new Set(keywordList)];
 
   if (currentCrawlerStatus.isRunning && currentCrawlerStatus.step !== 'LOGIN_OPEN') {
     throw new Error('Đang có tiến trình rà soát đang chạy.');
   }
 
+  const isBatchMode = keywordList.length > 1;
+  const initialDisplayKeyword = isBatchMode
+    ? `${categoryName ? `[${categoryName}] ` : ''}${keywordList[0]} (+${keywordList.length - 1} từ khác)`
+    : keywordList[0];
+
   currentCrawlerStatus.isRunning = true;
   currentCrawlerStatus.step = 'SEARCHING';
-  currentCrawlerStatus.currentKeyword = keyword;
+  currentCrawlerStatus.currentKeyword = initialDisplayKeyword;
+  currentCrawlerStatus.categoryName = categoryName || null;
+  currentCrawlerStatus.totalKeywords = keywordList.length;
+  currentCrawlerStatus.currentKeywordIndex = 1;
   currentCrawlerStatus.progress = 5;
   currentCrawlerStatus.foundCount = 0;
   currentCrawlerStatus.logs = [];
 
-  logMessage(`[PRODUCTION] Khởi động rà soát mạng xã hội với từ khóa y tế: "${keyword}" (Mục tiêu: ${maxPosts} mục)`, 'info');
-  logMessage('Chiến lược: ƯU TIÊN RÀ SOÁT CÁC TRANG (FANPAGE) TRƯỚC HỘI NHÓM (GROUPS)', 'info');
+  if (isBatchMode) {
+    logMessage(`⚡ [QUÉT TOÀN BỘ CHUYÊN MỤC] Khởi động quét loạt ${keywordList.length} từ khóa thuộc chuyên mục "${categoryName || 'Y tế Thẩm mỹ'}": ${keywordList.join(', ')}`, 'info');
+  } else {
+    logMessage(`[PRODUCTION] Khởi động rà soát mạng xã hội với từ khóa y tế: "${keywordList[0]}" (Mục tiêu: ${maxPosts} mục)`, 'info');
+  }
+  logMessage('Chiến lược: TÁI SỬ DỤNG TRÌNH DUYỆT - ƯU TIÊN FANPAGE TRƯỚC HỘI NHÓM - BÓC TÁCH ĐA PHƯƠNG TIỆN', 'info');
   logMessage('Căn cứ pháp lý: Luật KCB 15/2023/QH15, NĐ 96/2023/NĐ-CP, Luật QC 16/2012, NĐ 117/2020/NĐ-CP, NĐ 38/2021/NĐ-CP', 'info');
 
   let browserContext = activeBrowserContext;
@@ -337,183 +364,199 @@ export async function runScrapeAndInspect(options = {}) {
     const page = await browserContext.newPage();
     let candidateItems = [];
 
-    // ==========================================
-    // GIAI ĐOẠN 1: Ưu tiên tìm kiếm Fanpage y tế/thẩm mỹ trước
-    // ==========================================
-    const pagesSearchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(keyword)}`;
-    logMessage(`Giai đoạn 1 (Ưu tiên Page): Rà soát danh mục các Trang Fanpage: ${pagesSearchUrl}`, 'info');
-    currentCrawlerStatus.progress = 15;
-    broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
+    // Số lượng bài viết phân bổ cho mỗi từ khóa nếu chạy chế độ quét toàn bộ chuyên mục
+    const perKeywordMaxPosts = isBatchMode
+      ? Math.max(15, Math.ceil(maxPosts / Math.min(keywordList.length, 5)))
+      : maxPosts;
 
-    try {
-      await page.goto(pagesSearchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
-      await page.waitForTimeout(3000);
-
-      // Cuộn để nạp danh sách Fanpage
-      for (let s = 1; s <= 3; s++) {
-        await page.evaluate(() => window.scrollBy(0, 1000));
-        await page.waitForTimeout(1200);
-      }
-
-      const extractedPages = await page.evaluate(() => {
-        const results = [];
-        const items = document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb');
-        items.forEach((el) => {
-          if (results.length >= 25) return;
-          const clone = el.cloneNode(true);
-          clone.querySelectorAll('svg, button, form, [role="button"], [aria-label*="Facebook"]').forEach(n => n.remove());
-          const text = (clone.innerText || '').trim();
-          if (text.length < 15) return;
-
-          const heading = el.querySelector('h2 a, h3 a, h4 a, a[role="link"]');
-          if (!heading) return;
-          const name = (heading.innerText || '').trim();
-          if (name.length < 2 || /facebook|thích|theo dõi|trạng thái/i.test(name)) return;
-
-          const pageUrl = heading.href || window.location.href;
-          const imgs = Array.from(el.querySelectorAll('img'))
-            .map(i => i.src)
-            .filter(src => src && src.startsWith('http') && !src.includes('rsrc.php'));
-
-          results.push({
-            author: name,
-            authorHandle: `@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-            rawContent: text.slice(0, 600),
-            postType: 'Trang Fanpage',
-            postUrl: pageUrl,
-            mediaUrl: imgs[0] || null,
-            mediaGallery: imgs.slice(0, 4),
-            videoDuration: null,
-            isPage: true,
-            isGroup: false,
-            authorType: 'Page',
-            followers: 'Fanpage chính thức'
-          });
-        });
-        return results;
-      });
-
-      if (extractedPages.length > 0) {
-        logMessage(`Giai đoạn 1: Đã rà soát phát hiện ${extractedPages.length} Fanpage liên quan đến "${keyword}".`, 'info');
-        candidateItems.push(...extractedPages);
-      }
-    } catch (errPages) {
-      console.warn('Lỗi quét tab Pages (chuyển tiếp sang Posts):', errPages.message);
-    }
-
-    // ==========================================
-    // GIAI ĐOẠN 2: Quét bài viết trên Facebook (cuộn sâu đến 100 bài)
-    // ==========================================
-    const postsSearchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(keyword)}`;
-    logMessage(`Giai đoạn 2: Tự động điều hướng đến URL tìm kiếm bài viết Facebook: ${postsSearchUrl}`, 'info');
-    currentCrawlerStatus.step = 'SCRAPING';
-    currentCrawlerStatus.progress = 30;
-    broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
-
-    await page.goto(postsSearchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForTimeout(4000);
-
-    // Cuộn trang theo đợt để nạp dữ liệu đến 100 bài
-    const maxScrolls = Math.min(25, Math.max(8, Math.ceil(maxPosts / 4)));
-    for (let i = 1; i <= maxScrolls; i++) {
-      await page.evaluate(() => window.scrollBy(0, 1600));
-      await page.waitForTimeout(1600);
-      const postElementsCount = await page.evaluate(() =>
-        document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb').length
-      );
-      currentCrawlerStatus.progress = Math.min(75, Math.round(30 + (i / maxScrolls) * 45));
+    for (let kIdx = 0; kIdx < keywordList.length; kIdx++) {
+      const currentKw = keywordList[kIdx];
+      currentCrawlerStatus.currentKeyword = currentKw;
+      currentCrawlerStatus.currentKeywordIndex = kIdx + 1;
+      const baseProgress = Math.round((kIdx / keywordList.length) * 75);
+      currentCrawlerStatus.progress = Math.max(10, baseProgress);
       broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
 
-      if (postElementsCount >= maxPosts * 1.3) {
-        logMessage(`Đã nạp đủ ${postElementsCount} bài viết trên Facebook (đạt chỉ tiêu 100).`, 'info');
-        break;
+      logMessage(`\n--- [TỪ KHÓA ${kIdx + 1}/${keywordList.length}] Rà soát: "${currentKw}" ---`, 'info');
+
+      // GIAI ĐOẠN 1: Quét Fanpage liên quan đến currentKw
+      const pagesSearchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(currentKw)}`;
+      logMessage(`[${currentKw}] Rà soát danh mục Trang Fanpage: ${pagesSearchUrl}`, 'info');
+
+      try {
+        await page.goto(pagesSearchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
+        await page.waitForTimeout(2500);
+
+        for (let s = 1; s <= 2; s++) {
+          await page.evaluate(() => window.scrollBy(0, 1000));
+          await page.waitForTimeout(1000);
+        }
+
+        const extractedPages = await page.evaluate((kw) => {
+          const results = [];
+          const items = document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb');
+          items.forEach((el) => {
+            if (results.length >= 20) return;
+            const clone = el.cloneNode(true);
+            clone.querySelectorAll('svg, button, form, [role="button"], [aria-label*="Facebook"]').forEach(n => n.remove());
+            const text = (clone.innerText || '').trim();
+            if (text.length < 15) return;
+
+            const heading = el.querySelector('h2 a, h3 a, h4 a, a[role="link"]');
+            if (!heading) return;
+            const name = (heading.innerText || '').trim();
+            if (name.length < 2 || /facebook|thích|theo dõi|trạng thái/i.test(name)) return;
+
+            const pageUrl = heading.href || window.location.href;
+            const imgs = Array.from(el.querySelectorAll('img'))
+              .map(i => i.src)
+              .filter(src => src && src.startsWith('http') && !src.includes('rsrc.php'));
+
+            results.push({
+              author: name,
+              authorHandle: `@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+              rawContent: text.slice(0, 600),
+              postType: 'Trang Fanpage',
+              postUrl: pageUrl,
+              mediaUrl: imgs[0] || null,
+              mediaGallery: imgs.slice(0, 4),
+              videoDuration: null,
+              isPage: true,
+              isGroup: false,
+              authorType: 'Page',
+              followers: 'Fanpage chính thức',
+              matchedKeyword: kw
+            });
+          });
+          return results;
+        }, currentKw);
+
+        if (extractedPages.length > 0) {
+          logMessage(`[${currentKw}] Đã phát hiện ${extractedPages.length} Fanpage liên quan.`, 'info');
+          candidateItems.push(...extractedPages);
+        }
+      } catch (errPages) {
+        console.warn(`Lỗi quét tab Pages cho "${currentKw}":`, errPages.message);
+      }
+
+      // GIAI ĐOẠN 2: Quét bài viết Facebook cho currentKw
+      const postsSearchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(currentKw)}`;
+      logMessage(`[${currentKw}] Quét bài viết Facebook: ${postsSearchUrl}`, 'info');
+      currentCrawlerStatus.step = 'SCRAPING';
+      broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
+
+      try {
+        await page.goto(postsSearchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await page.waitForTimeout(3000);
+
+        const maxScrolls = Math.min(18, Math.max(5, Math.ceil(perKeywordMaxPosts / 4)));
+        for (let i = 1; i <= maxScrolls; i++) {
+          await page.evaluate(() => window.scrollBy(0, 1600));
+          await page.waitForTimeout(1400);
+          const postElementsCount = await page.evaluate(() =>
+            document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb').length
+          );
+
+          if (postElementsCount >= perKeywordMaxPosts * 1.3) {
+            logMessage(`[${currentKw}] Đã nạp đủ ${postElementsCount} bài viết trên Facebook.`, 'info');
+            break;
+          }
+        }
+
+        const extractedPosts = await page.evaluate(({ max, kw }) => {
+          const results = [];
+          const elements = document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb');
+
+          elements.forEach((el) => {
+            if (results.length >= max * 1.5) return;
+
+            const messageEl = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"], div.xdj266r.x11i5rnm.xat24cr.x1mh8g0r');
+            let rawText = '';
+            if (messageEl && messageEl.innerText && messageEl.innerText.trim().length > 15) {
+              rawText = messageEl.innerText.trim();
+            } else {
+              const clone = el.cloneNode(true);
+              clone.querySelectorAll('svg, button, form, [role="button"], [aria-label*="Facebook"], [aria-label*="thích"], [aria-label*="bình luận"], [aria-label*="chia sẻ"]').forEach(n => n.remove());
+              rawText = (clone.innerText || '').trim();
+            }
+
+            if (rawText.length < 25) return;
+
+            const authorLinks = Array.from(el.querySelectorAll('h2 a, h3 a, h4 a, strong a, a[role="link"]'));
+            const validAuthor = authorLinks.find(a => {
+              const t = a.innerText && a.innerText.trim();
+              if (!t || t.length < 2 || t.length > 70) return false;
+              if (/chỉ báo trạng thái|đang hoạt động|online|facebook|thích|bình luận|chia sẻ|theo dõi|xem thêm|tham gia|gợi ý/i.test(t)) {
+                return false;
+              }
+              return true;
+            });
+
+            let authorName = validAuthor ? validAuthor.innerText.trim() : 'Cơ sở Thẩm mỹ Facebook';
+            if (authorName.includes('\n')) {
+              authorName = authorName.split('\n')[0].trim();
+            }
+
+            const allLinks = Array.from(el.querySelectorAll('a[href]')).map(a => a.href || '');
+            const hasGroupLink = allLinks.some(href => href.includes('/groups/'));
+            const isGroupAuthor = /hội|nhóm|group|cộng đồng|tâm sự|chia sẻ/i.test(authorName);
+            const isGroup = hasGroupLink || isGroupAuthor;
+            const isPage = !isGroup;
+
+            const permalink = validAuthor ? validAuthor.href : (allLinks[0] || window.location.href);
+
+            const imgs = Array.from(el.querySelectorAll('img'))
+              .map(i => i.src)
+              .filter(src => src && src.startsWith('http') && !src.includes('emoji') && !src.includes('rsrc.php'));
+
+            const hasVideo = el.querySelectorAll('video').length > 0 || rawText.includes('00:') || rawText.includes('01:') || rawText.includes('Xem thêm video');
+
+            results.push({
+              author: authorName,
+              authorHandle: `@${authorName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+              rawContent: rawText.slice(0, 700),
+              postType: hasVideo ? 'Video' : (imgs.length > 0 ? 'Hình ảnh' : 'Bài viết'),
+              postUrl: permalink,
+              mediaUrl: imgs[0] || null,
+              mediaGallery: imgs.slice(0, 4),
+              videoDuration: hasVideo ? '01:00' : null,
+              isPage,
+              isGroup,
+              authorType: isPage ? 'Page' : 'Group',
+              followers: isPage ? 'Fanpage FB' : 'Hội Nhóm FB',
+              matchedKeyword: kw
+            });
+          });
+
+          return results;
+        }, { max: perKeywordMaxPosts, kw: currentKw });
+
+        if (extractedPosts.length > 0) {
+          logMessage(`[${currentKw}] Đã trích xuất ${extractedPosts.length} bài viết Facebook.`, 'info');
+          candidateItems.push(...extractedPosts);
+        }
+      } catch (errPosts) {
+        console.warn(`Lỗi quét tab Posts cho "${currentKw}":`, errPosts.message);
       }
     }
-
-    // Trích xuất bài viết sạch từ DOM Facebook
-    const extractedPosts = await page.evaluate((max) => {
-      const results = [];
-      const elements = document.querySelectorAll('div[role="feed"] > div, div[role="article"], div.x1yztbdb');
-
-      elements.forEach((el) => {
-        if (results.length >= max * 1.5) return;
-
-        // Ưu tiên trích xuất vùng message thật của Facebook
-        const messageEl = el.querySelector('div[data-ad-preview="message"], div[data-ad-comet-preview="message"], div.xdj266r.x11i5rnm.xat24cr.x1mh8g0r');
-        let rawText = '';
-        if (messageEl && messageEl.innerText && messageEl.innerText.trim().length > 15) {
-          rawText = messageEl.innerText.trim();
-        } else {
-          // Clone và loại bỏ thẻ svg, buttons, form, nhãn Facebook để không dính text rác
-          const clone = el.cloneNode(true);
-          clone.querySelectorAll('svg, button, form, [role="button"], [aria-label*="Facebook"], [aria-label*="thích"], [aria-label*="bình luận"], [aria-label*="chia sẻ"]').forEach(n => n.remove());
-          rawText = (clone.innerText || '').trim();
-        }
-
-        if (rawText.length < 25) return; // bỏ qua các nút hoặc chip điều hướng ngắn
-
-        // Tìm tên tác giả chuẩn
-        const authorLinks = Array.from(el.querySelectorAll('h2 a, h3 a, h4 a, strong a, a[role="link"]'));
-        const validAuthor = authorLinks.find(a => {
-          const t = a.innerText && a.innerText.trim();
-          if (!t || t.length < 2 || t.length > 70) return false;
-          if (/chỉ báo trạng thái|đang hoạt động|online|facebook|thích|bình luận|chia sẻ|theo dõi|xem thêm|tham gia|gợi ý/i.test(t)) {
-            return false;
-          }
-          return true;
-        });
-
-        let authorName = validAuthor ? validAuthor.innerText.trim() : 'Cơ sở Thẩm mỹ Facebook';
-        if (authorName.includes('\n')) {
-          authorName = authorName.split('\n')[0].trim();
-        }
-
-        // Nhận diện bài viết thuộc Trang (Page) hay Hội nhóm (Group)
-        const allLinks = Array.from(el.querySelectorAll('a[href]')).map(a => a.href || '');
-        const hasGroupLink = allLinks.some(href => href.includes('/groups/'));
-        const isGroupAuthor = /hội|nhóm|group|cộng đồng|tâm sự|chia sẻ/i.test(authorName);
-        const isGroup = hasGroupLink || isGroupAuthor;
-        const isPage = !isGroup;
-
-        // Đường dẫn bài viết
-        const permalink = validAuthor ? validAuthor.href : (allLinks[0] || window.location.href);
-
-        // Hình ảnh
-        const imgs = Array.from(el.querySelectorAll('img'))
-          .map(i => i.src)
-          .filter(src => src && src.startsWith('http') && !src.includes('emoji') && !src.includes('rsrc.php'));
-
-        // Video
-        const hasVideo = el.querySelectorAll('video').length > 0 || rawText.includes('00:') || rawText.includes('01:') || rawText.includes('Xem thêm video');
-
-        results.push({
-          author: authorName,
-          authorHandle: `@${authorName.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-          rawContent: rawText.slice(0, 700),
-          postType: hasVideo ? 'Video' : (imgs.length > 0 ? 'Hình ảnh' : 'Bài viết'),
-          postUrl: permalink,
-          mediaUrl: imgs[0] || null,
-          mediaGallery: imgs.slice(0, 4),
-          videoDuration: hasVideo ? '01:00' : null,
-          isPage,
-          isGroup,
-          authorType: isPage ? 'Page' : 'Group',
-          followers: isPage ? 'Fanpage FB' : 'Hội Nhóm FB'
-        });
-      });
-
-      return results;
-    }, maxPosts);
 
     await page.close().catch(() => {});
 
-    // Làm sạch nội dung bài viết và đưa vào ứng viên
-    for (const p of extractedPosts) {
-      candidateItems.push(p);
+    // Khử trùng lặp (Deduplicate) theo postUrl hoặc author + nội dung đầu
+    const seenMap = new Set();
+    const uniqueCandidates = [];
+    for (const item of candidateItems) {
+      const key = item.postUrl ? item.postUrl : `${item.author}_${(item.rawContent || '').slice(0, 40)}`;
+      if (!seenMap.has(key)) {
+        seenMap.add(key);
+        uniqueCandidates.push(item);
+      }
     }
 
+    logMessage(`Tổng hợp qua ${keywordList.length} từ khóa: Đã thu thập ${candidateItems.length} mục -> Khử trùng lặp còn ${uniqueCandidates.length} mục duy nhất.`, 'info');
+
     // Làm sạch và chuẩn hóa nội dung văn bản cho toàn bộ ứng viên
-    const processedItems = candidateItems.map(p => {
+    const processedItems = uniqueCandidates.map(p => {
       const cleanContent = cleanFacebookText(p.rawContent || p.content, p.author);
       return {
         ...p,
@@ -530,8 +573,9 @@ export async function runScrapeAndInspect(options = {}) {
       return 0;
     });
 
-    // Cắt theo số lượng kiểm tra 1 lần (tối đa maxPosts = 100)
-    const finalItems = processedItems.slice(0, maxPosts);
+    // Cắt theo số lượng kiểm tra tổng (nếu quét đơn thì maxPosts, nếu quét nhiều từ khóa thì tối đa Math.max(maxPosts, keywordList.length * 20))
+    const totalScanLimit = isBatchMode ? Math.max(maxPosts, keywordList.length * 25) : maxPosts;
+    const finalItems = processedItems.slice(0, totalScanLimit);
 
     logMessage(`Đã xử lý trích xuất ${finalItems.length} mục (${finalItems.filter(p => p.isPage).length} Fanpage, ${finalItems.filter(p => p.isGroup).length} Hội nhóm) sẵn sàng đối soát vi phạm.`, 'info');
     if (finalItems.length > 0) {
@@ -542,7 +586,7 @@ export async function runScrapeAndInspect(options = {}) {
     // BƯỚC 4: Phân tích vi phạm bằng Rule Engine pháp luật y tế
     // ==========================================
     currentCrawlerStatus.step = 'ANALYZING';
-    currentCrawlerStatus.progress = 85;
+    currentCrawlerStatus.progress = 80;
     broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
 
     const newViolations = [];
@@ -596,7 +640,7 @@ export async function runScrapeAndInspect(options = {}) {
           violationDetails: analysis.violationDetails,
           legalBasis: analysis.legalBasis,
           recommendations: analysis.recommendations,
-          notes: `Tự động phát hiện khi rà soát thật từ khóa "${keyword}" (${p.authorType === 'Page' ? 'Trang Fanpage' : 'Hội Nhóm'})`
+          notes: `Tự động phát hiện khi rà soát thật từ khóa "${p.matchedKeyword || keywordList[0]}" (${categoryName ? `Chuyên mục: ${categoryName} - ` : ''}${p.authorType === 'Page' ? 'Trang Fanpage' : 'Hội Nhóm'})`
         };
 
         addViolation(item);
