@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { analyzeContent } from './analyzer.js';
+import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
 import { addViolation, getViolations, incrementScannedCount } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -550,7 +550,7 @@ export async function runScrapeAndInspect(options = {}) {
 
     for (let i = 0; i < finalItems.length; i++) {
       const p = finalItems[i];
-      const analysis = analyzeContent(p);
+      const analysis = await analyzeContentWithAi(p);
 
       if (analysis.isViolation) {
         const item = {

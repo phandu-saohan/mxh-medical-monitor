@@ -17,7 +17,7 @@ import {
   initDbSync
 } from './db.js';
 import { isSupabaseConnected } from './supabase.js';
-import { analyzeContent, VIOLATION_CATEGORIES } from './analyzer.js';
+import { analyzeContent, analyzeContentWithAi, VIOLATION_CATEGORIES } from './analyzer.js';
 import {
   openBrowserForLogin,
   saveFacebookCookies,
@@ -299,11 +299,15 @@ app.post('/api/keywords/bulk-add', (req, res) => {
   res.json({ success: true, addedCount, total: kws.length });
 });
 
-// API: Analyze Custom Text
-app.post('/api/ai-analyze', (req, res) => {
-  const { content, author, title } = req.body;
-  const analysis = analyzeContent({ content, author, title });
-  res.json(analysis);
+// API: Analyze Custom Text with AI
+app.post('/api/ai-analyze', async (req, res) => {
+  try {
+    const { content, author, title, mediaUrl, postType, ocrText } = req.body;
+    const analysis = await analyzeContentWithAi({ content, author, title, mediaUrl, postType, ocrText });
+    res.json(analysis);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // API: Step 1 - Open Browser for Login

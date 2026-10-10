@@ -122,12 +122,51 @@ export const LEGAL_RULES = [
 ];
 
 /**
- * Analyzes post text, metadata, and media description
- * Returns violation status, matched categories, detailed points, legal basis, severity, and recommendations
+ * Danh mục nhận diện nội dung/dịch vụ liên quan đến THẨM MỸ Y TẾ & LÀM ĐẸP
+ * Dùng để khoanh vùng trọng tâm, LOẠI BỎ 100% các chủ đề không liên quan (quần áo, ăn uống, đời sống...).
+ */
+export const COSMETIC_INDICATORS = [
+  'thẩm mỹ', 'spa', 'phẫu thuật', 'tiêm', 'filler', 'botox', 'meso', 
+  'nâng mũi', 'cắt mí', 'hút mỡ', 'nâng ngực', 'căng chỉ', 'gọt cằm', 
+  'độn cằm', 'độn thái dương', 'cắt môi', 'truyền trắng', 'chăm sóc da', 
+  'trẻ hóa', 'trị nám', 'trị mụn', 'bác sĩ thẩm mỹ', 'viện thẩm mỹ', 
+  'phòng khám', 'clinic', 'beauty', 'làm đẹp', 'tiểu phẫu', 'đại phẫu',
+  'bàn mổ', 'giảm béo', 'siết eo', 'cấy mỡ', 'nâng cung mày', 'bọc răng sứ',
+  'nhấn mí', 'làm mũi', 'làm ngực', 'cắt da thừa', 'hút mỡ bụng', 'cấy phấn',
+  'tạo hình', 'phun xăm', 'cắt da thừa', 'chỉnh hình'
+];
+
+/**
+ * Kiểm tra xem bài viết hoặc trang có liên quan đến DỊCH VỤ THẨM MỸ hay không
+ */
+export function isCosmeticRelated(text) {
+  if (!text || typeof text !== 'string') return false;
+  const lower = text.toLowerCase();
+  return COSMETIC_INDICATORS.some(kw => lower.includes(kw));
+}
+
+/**
+ * Analyzes post text, metadata, and media description (Heuristic Rule Engine)
+ * Tập trung 100% vào dịch vụ thẩm mỹ, loại bỏ hoàn toàn nội dung lan man ngoài ngành.
  */
 export function analyzeContent(post) {
   const text = ((post.content || '') + ' ' + (post.author || '') + ' ' + (post.title || '')).toLowerCase();
   
+  // NGUYÊN TẮC TRỌNG TÂM: Chỉ thẩm định các bài viết hoặc trang có liên quan đến DỊCH VỤ THẨM MỸ.
+  // Tuyệt đối không lan man sang các ngành nghề khác (quần áo, ăn uống, đời sống...).
+  if (!isCosmeticRelated(text)) {
+    return {
+      isViolation: false,
+      isCosmetic: false,
+      category: 'Nội dung hợp lệ',
+      severity: 'Bình thường',
+      violationDetails: [],
+      legalBasis: [],
+      recommendations: [],
+      matchedKeywords: []
+    };
+  }
+
   const matchedRules = [];
   const violationPoints = [];
   const legalBases = [];
@@ -178,6 +217,7 @@ export function analyzeContent(post) {
 
   return {
     isViolation,
+    isCosmetic: true,
     category: primaryCategory || 'Nội dung hợp lệ',
     severity: isViolation ? maxSeverity : 'Bình thường',
     violationDetails: violationPoints,
@@ -185,4 +225,162 @@ export function analyzeContent(post) {
     recommendations: Array.from(recommendations),
     matchedKeywords: matchedRules.flatMap(r => r.matchedKeywords)
   };
+}
+
+/**
+ * Mô hình AI Google Gemini phân tích bài viết, hình ảnh và video chuyên sâu về dịch vụ thẩm mỹ
+ * Tập trung 100% vào vi phạm của các trang Fanpage, không lan man vào các vấn đề khác.
+ */
+export async function analyzeContentWithAi(post, options = {}) {
+  const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
+  const model = options.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+  // Nếu chưa cấu hình Gemini API Key, sử dụng bộ engine heuristic chuyên sâu
+  if (!apiKey || !apiKey.trim()) {
+    return analyzeContent(post);
+  }
+
+  // Pre-filter: Nếu bài viết hoàn toàn không có dấu hiệu liên quan đến thẩm mỹ
+  const fullText = `${post.content || ''} ${post.author || ''}`.toLowerCase();
+  if (!isCosmeticRelated(fullText) && !post.ocrText) {
+    return {
+      isViolation: false,
+      isCosmetic: false,
+      category: 'Nội dung hợp lệ',
+      severity: 'Bình thường',
+      violationDetails: [],
+      legalBasis: [],
+      recommendations: [],
+      matchedKeywords: []
+    };
+  }
+
+  try {
+    const isPage = post.authorType === 'Page' || post.isPage;
+    const cleanContent = (post.content || '').slice(0, 1500);
+
+    const prompt = 
+`Bạn là Trợ lý AI Chuyên gia Thanh tra Giám sát Y tế & Pháp luật Quảng cáo Dịch vụ Thẩm mỹ Việt Nam.
+Căn cứ pháp lý:
+- Luật Khám bệnh, chữa bệnh 15/2023/QH15 & Nghị định 96/2023/NĐ-CP (quy định nghiêm ngặt về cơ sở thẩm mỹ, cấm spa xâm lấn phẫu thuật).
+- Luật Quảng cáo 16/2012/QH13 (cấm cam kết tuyệt đối 100%, vĩnh viễn, cấm quảng cáo KCB không phép).
+- Nghị định 117/2020/NĐ-CP (Xử phạt Y tế) & Nghị định 38/2021/NĐ-CP (Xử phạt Quảng cáo, cấm dùng ảnh Before/After của người bệnh).
+- Nghị định 147/2024/NĐ-CP & Điều 15a Luật Quảng cáo sửa đổi 2026 (trách nhiệm liên đới của KOLs/KOCs quảng cáo thẩm mỹ).
+
+NHIỆM VỤ CỐT LÕI:
+Thẩm định xem bài đăng sau có vi phạm các quy định pháp luật về QUẢNG CÁO DỊCH VỤ THẨM MỸ Y TẾ hay không.
+
+QUY TẮC BẤT DI BẤT DỊCH (TẬP TRUNG VI PHẠM THẨM MỸ - KHÔNG LAN MAN SANG VẤN ĐỀ KHÁC):
+1. CHỈ TẬP TRUNG VÀO DỊCH VỤ THẨM MỸ: Can thiệp xâm lấn cơ thể (tiêm filler/botox/meso, nâng mũi, cắt mí, hút mỡ, nâng ngực, căng chỉ, độn cằm...), cam kết kết quả sai sự thật, hình ảnh Before-After tại cơ sở làm đẹp.
+2. TUYỆT ĐỐI KHÔNG BẮT LỖI LAN MAN: Bỏ qua hoàn toàn bài viết không liên quan đến thẩm mỹ (quần áo, mỹ phẩm bôi ngoài da thông thường, đồ gia dụng, ăn uống, đời sống cá nhân...). Dịch vụ làm đẹp không xâm lấn (gội đầu, chăm sóc da cơ bản, làm nail) là HỢP LỆ, trừ khi có tiêm chích/phẫu thuật hoặc cam kết chữa khỏi 100%.
+3. ĐẶC BIỆT CHÚ Ý TRANG FANPAGE: ${isPage ? 'ĐÂY LÀ TRANG FANPAGE KINH DOANH DỊCH VỤ THẨM MỸ -> Kiểm tra kỹ tính hợp pháp của dịch vụ chào mời và giấy phép.' : 'Tài khoản cá nhân / Hội nhóm.'}
+
+DỮ LIỆU ĐÁNH GIÁ:
+- Tên Trang/Tác giả: "${post.author || 'Chưa xác định'}"
+- Phân loại tài khoản: ${isPage ? 'Trang Fanpage' : 'Hội nhóm'}
+- Định dạng: ${post.postType || 'Bài viết'}
+- Nội dung bài đăng: """${cleanContent}"""
+${post.ocrText ? `- Chữ đọc được từ ảnh/banner (OCR): """${post.ocrText}"""` : ''}
+
+YÊU CẦU TRẢ VỀ:
+Chỉ trả về DUY NHẤT một chuỗi JSON hợp lệ (không kèm bất kỳ văn bản giải thích nào ngoài JSON):
+{
+  "isViolation": true hoặc false,
+  "isCosmetic": true hoặc false,
+  "category": "Quảng cáo dịch vụ thẩm mỹ trái phép" | "Cam kết hiệu quả không đúng" | "Sử dụng hình ảnh trước/sau sai sự thật" | "Thông tin không được cấp phép" | "Quảng cáo KOLs/Reviewer không minh bạch" | "Nội dung hợp lệ",
+  "severity": "Cao" | "Trung bình" | "Thấp" | "Bình thường",
+  "violationDetails": ["từng vi phạm cụ thể, ngắn gọn, súc tích"],
+  "legalBasis": ["điều luật viện dẫn chính xác"],
+  "recommendations": ["đề xuất xử lý hành chính"],
+  "matchedKeywords": ["các từ ngữ/dịch vụ vi phạm được phát hiện"]
+}`;
+
+    // Payload for Gemini
+    const contentsParts = [{ text: prompt }];
+
+    // Optional: nếu bài viết có mediaUrl và chưa có ocrText, gửi kèm ảnh trực tiếp vào Gemini Multimodal Vision
+    if (post.mediaUrl && !post.ocrText && typeof post.mediaUrl === 'string' && post.mediaUrl.startsWith('http')) {
+      try {
+        const imgRes = await fetch(post.mediaUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(3500)
+        });
+        if (imgRes.ok) {
+          const arrBuf = await imgRes.arrayBuffer();
+          const b64 = Buffer.from(arrBuf).toString('base64');
+          const mime = (imgRes.headers.get('content-type') || 'image/jpeg').split(';')[0];
+          contentsParts.push({
+            inline_data: { mime_type: mime, data: b64 }
+          });
+        }
+      } catch {
+        // Fetch image timeout/error -> proceed with text prompt
+      }
+    }
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey.trim())}`;
+    const apiRes = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: contentsParts }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 500
+        }
+      }),
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!apiRes.ok) {
+      return analyzeContent(post);
+    }
+
+    const data = await apiRes.json();
+    const rawAiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // Parse JSON from Gemini response
+    const jsonMatch = rawAiText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return analyzeContent(post);
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // Nếu AI kết luận không liên quan thẩm mỹ thì không thể là vi phạm thẩm mỹ
+    if (parsed.isCosmetic === false) {
+      return {
+        isViolation: false,
+        isCosmetic: false,
+        category: 'Nội dung hợp lệ',
+        severity: 'Bình thường',
+        violationDetails: [],
+        legalBasis: [],
+        recommendations: [],
+        matchedKeywords: []
+      };
+    }
+
+    return {
+      isViolation: Boolean(parsed.isViolation),
+      isCosmetic: true,
+      category: parsed.category || VIOLATION_CATEGORIES.UNAUTHORIZED_COSMETIC_SURGERY,
+      severity: parsed.severity || (parsed.isViolation ? 'Cao' : 'Bình thường'),
+      violationDetails: Array.isArray(parsed.violationDetails) ? parsed.violationDetails : [],
+      legalBasis: Array.isArray(parsed.legalBasis) && parsed.legalBasis.length > 0 ? parsed.legalBasis : [
+        'Điều 19, Điều 83 Luật Khám bệnh, chữa bệnh 15/2023/QH15',
+        'Khoản 2 Điều 37 & Điều 38 Nghị định 96/2023/NĐ-CP',
+        'Khoản 1 & Khoản 2 Điều 56 Nghị định 38/2021/NĐ-CP'
+      ],
+      recommendations: Array.isArray(parsed.recommendations) && parsed.recommendations.length > 0 ? parsed.recommendations : [
+        'Lập biên bản vi phạm hành chính chuyển Thanh tra Sở Y tế kiểm tra đột xuất tại cơ sở',
+        'Yêu cầu cơ sở gỡ bỏ ngay lập tức nội dung quảng cáo vi phạm trên Fanpage'
+      ],
+      matchedKeywords: Array.isArray(parsed.matchedKeywords) ? parsed.matchedKeywords : [],
+      aiAnalyzed: true
+    };
+  } catch (err) {
+    console.warn('[Gemini AI Analyzer Warning, falling back to rule engine]:', err.message);
+    return analyzeContent(post);
+  }
 }

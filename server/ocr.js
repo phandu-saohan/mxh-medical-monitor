@@ -28,15 +28,16 @@ export async function extractOcrFromImageUrl(imageUrl, apiKey = process.env.GEMI
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
-    // 2. Call Gemini Multimodal API
+    // 2. Call Gemini Multimodal API with laser-focused cosmetic advertising prompt
     const prompt = 
-      `Bạn là trợ lý AI giám sát thanh tra y tế. Nhiệm vụ của bạn là đọc và trích xuất chữ trong ảnh quảng cáo thẩm mỹ này.\n` +
-      `Yêu cầu:\n` +
-      `1. Đọc toàn bộ chữ in, slogan, số điện thoại hotline, địa chỉ, giá tiền (VD: 499k, 199k), từ ngữ cam kết (VD: vĩnh viễn, không đau).\n` +
-      `2. Nhận diện nếu có hình ảnh so sánh Trước/Sau (Before-After) hoặc hình ảnh kim tiêm, phẫu thuật, bàn mổ.\n` +
-      `Trả về đoạn văn bản ngắn gọn, chính xác tiếng Việt các nội dung đọc được.`;
+      `Bạn là trợ lý AI giám sát thanh tra y tế chuyên sâu về DỊCH VỤ THẨM MỸ (Phẫu thuật thẩm mỹ, tiêm truyền, spa/viện thẩm mỹ).\n` +
+      `Nhiệm vụ của bạn là đọc và phân tích ảnh/banner quảng cáo này, TẬP TRUNG TUYỆT ĐỐI VÀO CÁC DẤU HIỆU VI PHẠM THẨM MỸ, KHÔNG LAN MAN VÀO CÁC VẤN ĐỀ KHÁC:\n` +
+      `1. Đọc toàn bộ chữ in, tên dịch vụ làm đẹp (tiêm filler, botox, meso, nâng mũi, cắt mí, hút mỡ, nâng ngực, căng chỉ...), giá tiền (VD: 499k, 199k), hotline, địa chỉ cơ sở.\n` +
+      `2. Trích xuất các cam kết sai sự thật nếu có (VD: vĩnh viễn, không đau 100%, an toàn tuyệt đối, đẹp ngay tại bàn mổ).\n` +
+      `3. Nhận diện hình ảnh trực quan: Có hình ảnh so sánh Trước/Sau (Before-After), hình ảnh kim tiêm, thuốc tiêm, hoặc quay chụp tại phòng mổ/bàn mổ không?\n` +
+      `Trả về đoạn văn bản tiếng Việt ngắn gọn, súc tích chỉ nêu các chi tiết phát hiện được liên quan đến dịch vụ thẩm mỹ.`;
 
-    const model = 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key.trim())}`;
 
     const payload = {

@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-import { analyzeContent } from './analyzer.js';
+import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
 import { addViolation } from './db.js';
 
 /**
@@ -85,7 +85,7 @@ export async function searchMetaAdLibrary(keyword = 'nâng mũi', accessToken = 
 
     if (liveAds && liveAds.length > 0) {
       console.log(`[Meta Ad Library Real] Trích xuất thành công ${liveAds.length} bài quảng cáo thật từ Meta.`);
-      return processMetaAds(liveAds, keyword);
+      return await processMetaAds(liveAds, keyword);
     }
   } catch (err) {
     console.error(`[Meta Ad Library Real Scraping Warning]: ${err.message}`);
@@ -96,7 +96,7 @@ export async function searchMetaAdLibrary(keyword = 'nâng mũi', accessToken = 
   return [];
 }
 
-function processMetaAds(ads, keyword) {
+async function processMetaAds(ads, keyword) {
   const detectedViolations = [];
   const now = new Date();
   const dateFormatted = `${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -106,7 +106,12 @@ function processMetaAds(ads, keyword) {
     const text = (ad.ad_creative_bodies && ad.ad_creative_bodies[0]) || '';
     const author = ad.page_name || 'Đơn vị quảng cáo Meta';
 
-    const analysis = analyzeContent({ content: text, author });
+    const analysis = await analyzeContentWithAi({
+      content: text,
+      author,
+      isPage: true,
+      authorType: 'Page'
+    });
     if (analysis.isViolation) {
       const item = {
         id: `ad-real-${Date.now().toString().slice(-6)}-${i}`,
