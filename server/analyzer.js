@@ -100,6 +100,24 @@ export const LEGAL_RULES = [
       'Kiểm tra tính pháp lý của danh xưng "Viện Thẩm Mỹ Quốc Tế" hoặc "Bệnh Viện Thẩm Mỹ"',
       'Chuyển cơ quan điều tra nếu phát hiện hành vi làm giả bằng cấp, chứng chỉ hành nghề y tế'
     ]
+  },
+  {
+    category: 'Quảng cáo KOLs/Reviewer không minh bạch',
+    keywords: [
+      'review có tâm', 'được tài trợ', 'bác sĩ ruột của mình', 'trải nghiệm dịch vụ tại', 
+      'kols review', 'tiktoker review', 'nghệ sĩ tin dùng', 'diễn viên trải nghiệm'
+    ],
+    legalBasis: [
+      'Điều 15a Luật Quảng cáo (sửa đổi hiệu lực 2026): Người chuyển tải sản phẩm quảng cáo (KOLs, KOCs) phải kiểm chứng hồ sơ pháp lý của cơ sở trước khi quảng bá và chịu trách nhiệm liên đới nếu quảng cáo sai sự thật.',
+      'Khoản 3 Điều 15a Luật Quảng cáo (sửa đổi hiệu lực 2026): Bắt buộc phải thông báo rõ ràng cho người xem biết đây là nội dung quảng cáo (gắn nhãn #Ads/Quảng cáo).',
+      'Nghị định số 147/2024/NĐ-CP: Tài khoản mạng xã hội đăng tải nội dung thương mại phải được xác thực danh tính; xử lý nghiêm hành vi tiếp tay cho dịch vụ y tế không phép.'
+    ],
+    severity: 'Cao',
+    recommendations: [
+      'Xác minh hợp đồng quảng cáo và trách nhiệm liên đới giữa cơ sở thẩm mỹ và người nổi tiếng (KOL/KOC)',
+      'Yêu cầu gỡ bỏ video/bài viết và công khai đính chính nếu cơ sở chưa được cấp phép can thiệp xâm lấn',
+      'Chuyển thông tin cho cơ quan thuế và cơ quan quản lý thông tin để xử lý nghĩa vụ thuế và vi phạm hành chính'
+    ]
   }
 ];
 
@@ -140,6 +158,8 @@ export function analyzeContent(post) {
         violationPoints.push(`Sử dụng hình ảnh so sánh trước/sau can thiệp thẩm mỹ trái với quy định tại Nghị định 38/2021/NĐ-CP.`);
       } else if (rule.category === VIOLATION_CATEGORIES.UNLICENSED_INFO) {
         violationPoints.push(`Quảng bá danh xưng chuyên gia/bác sĩ, công nghệ chuẩn quốc tế mà không có số hiệu giấy phép kiểm chứng.`);
+      } else if (rule.category === 'Quảng cáo KOLs/Reviewer không minh bạch') {
+        violationPoints.push(`Người ảnh hưởng/KOLs thực hiện quảng bá dịch vụ thẩm mỹ không gắn nhãn minh bạch hoặc tiếp tay cho cơ sở chưa được cấp phép (Điều 15a Luật Quảng cáo sửa đổi).`);
       }
 
       rule.legalBasis.forEach(lb => legalBases.push(lb));
