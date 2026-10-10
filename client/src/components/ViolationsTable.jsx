@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
 import { MoreHorizontal, FileText, CheckCircle, Clock } from 'lucide-react';
 
+function cleanContentText(text) {
+  if (!text) return '';
+  return text
+    .replace(/(?:\bFacebook\b[\s,.:;·•\-_/|]*){2,}/gi, ' ')
+    .replace(/^\s*(?:Facebook[\s,.:;·•\-_/|]*)+/gi, '')
+    .replace(/(?:Facebook[\s,.:;·•\-_/|]*)+\s*$/gi, '')
+    .replace(/\bFacebook\s+Facebook\b/gi, '')
+    .replace(/Có thể là hình ảnh về[^\n\.]*(?:\.|\n|$)/gi, ' ')
+    .replace(/May be an image of[^\n\.]*(?:\.|\n|$)/gi, ' ')
+    .replace(/Đã chia sẻ bài viết.*$/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export default function ViolationsTable({
   violations = [],
   totalCount = 156,
@@ -174,11 +188,20 @@ export default function ViolationsTable({
                       />
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-slate-800 line-clamp-2 leading-relaxed">
-                          {item.content}
+                          {cleanContentText(item.content)}
                         </p>
-                        <div className="text-[11px] text-slate-400 mt-1 truncate">
-                          Trang: <span className="font-semibold text-slate-600">{item.author}</span>
-                          <span className="ml-1 text-slate-400">({item.followers} followers)</span>
+                        <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5 truncate">
+                          {item.isGroup || item.authorType === 'Group' || /hội|nhóm|group|cộng đồng|tâm sự|chia sẻ/i.test(item.author) ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 shrink-0">
+                              Hội Nhóm
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                              Fanpage
+                            </span>
+                          )}
+                          <span className="font-semibold text-slate-700 truncate">{item.author}</span>
+                          <span className="text-slate-400 shrink-0">({item.followers || 'Đang hoạt động'})</span>
                         </div>
                       </div>
                     </div>

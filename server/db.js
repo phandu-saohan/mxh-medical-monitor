@@ -366,6 +366,59 @@ function generateFullDataset() {
   return dataset;
 }
 
+export function cleanViolationRecord(item) {
+  if (!item) return item;
+  let content = item.content || '';
+  
+  // 1. Remove repeated "Facebook" blocks (e.g. "Facebook Facebook Facebook...")
+  content = content.replace(/(?:\bFacebook\b[\s,.:;·•\-_/|]*){2,}/gi, ' ');
+  content = content.replace(/^\s*(?:Facebook[\s,.:;·•\-_/|]*)+/gi, '');
+  content = content.replace(/(?:Facebook[\s,.:;·•\-_/|]*)+\s*$/gi, '');
+  content = content.replace(/\bFacebook\s+Facebook\b/gi, '');
+
+  // 2. Remove automated Facebook image alt text
+  content = content.replace(/Có thể là hình ảnh về[^\n\.]*(?:\.|\n|$)/gi, ' ');
+  content = content.replace(/May be an image of[^\n\.]*(?:\.|\n|$)/gi, ' ');
+
+  // 3. Remove Facebook UI/interaction metadata strings
+  content = content.replace(/Đã chia sẻ bài viết\s*\d*[\s\d]*.*$/gi, '');
+  content = content.replace(/\b(Chỉ báo trạng thái online|Đang hoạt động trên FB|Đang hoạt động)\b/gi, '');
+  content = content.replace(/\b(Thích|Bình luận|Chia sẻ|Gửi tin nhắn|Xem thêm|Gợi ý cho bạn|Gợi ý)\b/gi, '');
+
+  // 4. Clean author name if it got polluted by Facebook status indicators
+  let author = item.author || '';
+  if (/chỉ báo trạng thái|đang hoạt động|online/i.test(author)) {
+    author = 'Cơ sở Thẩm mỹ trên Facebook';
+  }
+  author = author.replace(/^(?:Facebook[\s,.:;·•\-_/|]*)+/gi, '').trim();
+  if (!author) author = 'Cơ sở Thẩm mỹ Facebook';
+
+  // If content still starts with author name, trim it
+  if (author && content.startsWith(author)) {
+    content = content.slice(author.length).trim();
+  }
+
+  content = content.replace(/[·•]\s*[·•]+/g, '·');
+  content = content.replace(/^[·•,\s\-_:]+/, '');
+  content = content.replace(/\s{2,}/g, ' ').trim();
+
+  // Determine authorType (Fanpage vs Group)
+  const isGroup = !!(
+    item.isGroup ||
+    item.authorType === 'Group' ||
+    (item.postUrl && item.postUrl.includes('/groups/')) ||
+    /hội|nhóm|group|cộng đồng|tâm sự|chia sẻ/i.test(author)
+  );
+
+  return {
+    ...item,
+    author,
+    content: content || item.content,
+    isGroup,
+    authorType: isGroup ? 'Group' : 'Page'
+  };
+}
+
 export function getViolations() {
   if (!fs.existsSync(VIOLATIONS_FILE)) {
     fs.writeFileSync(VIOLATIONS_FILE, JSON.stringify([], null, 2), 'utf-8');
@@ -373,7 +426,22 @@ export function getViolations() {
   }
   try {
     const raw = fs.readFileSync(VIOLATIONS_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const items = JSON.parse(raw);
+    if (!Array.isArray(items)) return [];
+    
+    let hasDirty = false;
+    const cleaned = items.map(it => {
+      const c = cleanViolationRecord(it);
+      if (c.content !== it.content || c.author !== it.author || c.authorType !== it.authorType) {
+        hasDirty = true;
+      }
+      return c;
+    });
+    
+    if (hasDirty) {
+      fs.writeFileSync(VIOLATIONS_FILE, JSON.stringify(cleaned, null, 2), 'utf-8');
+    }
+    return cleaned;
   } catch (e) {
     console.error('Error reading violations:', e);
     return [];
@@ -402,11 +470,12 @@ export async function initDbSync() {
 }
 
 export function addViolation(item) {
+  const cleanedItem = cleanViolationRecord(item);
   const list = getViolations();
-  list.unshift(item);
+  list.unshift(cleanedItem);
   saveViolations(list);
-  upsertViolationToSupabase(item).catch(err => console.warn('[Supabase] Lỗi lưu vi phạm:', err.message));
-  return item;
+  upsertViolationToSupabase(cleanedItem).catch(err => console.warn('[Supabase] Lỗi lưu vi phạm:', err.message));
+  return cleanedItem;
 }
 
 export function updateViolation(id, updates) {

@@ -17,6 +17,20 @@ import {
   RefreshCw
 } from 'lucide-react';
 
+function cleanContentText(text) {
+  if (!text) return '';
+  return text
+    .replace(/(?:\bFacebook\b[\s,.:;·•\-_/|]*){2,}/gi, ' ')
+    .replace(/^\s*(?:Facebook[\s,.:;·•\-_/|]*)+/gi, '')
+    .replace(/(?:Facebook[\s,.:;·•\-_/|]*)+\s*$/gi, '')
+    .replace(/\bFacebook\s+Facebook\b/gi, '')
+    .replace(/Có thể là hình ảnh về[^\n\.]*(?:\.|\n|$)/gi, ' ')
+    .replace(/May be an image of[^\n\.]*(?:\.|\n|$)/gi, ' ')
+    .replace(/Đã chia sẻ bài viết.*$/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export default function ViolationDetailModal({
   item,
   onClose,
@@ -94,18 +108,29 @@ export default function ViolationDetailModal({
             }}
           />
           <div>
-            <h4 className="font-bold text-slate-900 text-sm">
-              {item.author}
-            </h4>
+            <div className="flex items-center gap-1.5">
+              <h4 className="font-bold text-slate-900 text-sm">
+                {item.author}
+              </h4>
+              {item.isGroup || item.authorType === 'Group' || /hội|nhóm|group|cộng đồng|tâm sự|chia sẻ/i.test(item.author) ? (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  Hội Nhóm
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  Fanpage
+                </span>
+              )}
+            </div>
             <div className="text-[11px] text-slate-400">
-              {item.followers} • {item.timestamp}
+              {item.followers || 'Đang hoạt động'} • {item.timestamp}
             </div>
           </div>
         </div>
 
         {/* Post Text */}
-        <div className="text-slate-700 font-medium leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-          {item.content}
+        <div className="text-slate-700 font-medium leading-relaxed bg-slate-50/70 p-3 rounded-xl border border-slate-100 whitespace-pre-line">
+          {cleanContentText(item.content)}
         </div>
 
         {/* Media Preview Box */}

@@ -21,7 +21,7 @@ import {
 export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   const [activeTab, setActiveTab] = useState('crawler'); // 'crawler' | 'meta-ads' | 'scheduler'
   const [keyword, setKeyword] = useState('nâng mũi cấu trúc');
-  const [maxPosts, setMaxPosts] = useState(15);
+  const [maxPosts, setMaxPosts] = useState(100);
   const [isOpeningBrowser, setIsOpeningBrowser] = useState(false);
   const [isRunningScan, setIsRunningScan] = useState(false);
   const [sessionStatus, setSessionStatus] = useState(null);
@@ -416,18 +416,23 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                     </div>
                   </div>
 
-                  <div className="pt-3 flex items-center justify-between text-[11px] text-slate-500">
-                    <label htmlFor="crawler-max-posts-select">Số bài tối đa:</label>
+                  <div className="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-1.5">
+                      <label htmlFor="crawler-max-posts-select" className="font-medium text-slate-700">Số lượng kiểm tra 1 lần:</label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                        Ưu tiên Fanpage trước Group
+                      </span>
+                    </div>
                     <select
                       id="crawler-max-posts-select"
                       name="maxPosts"
                       value={maxPosts}
                       onChange={(e) => setMaxPosts(Number(e.target.value))}
-                      className="bg-white border border-slate-300 rounded-md px-2 py-1 font-semibold"
+                      className="bg-white border border-slate-300 rounded-md px-2 py-1 font-semibold text-slate-800"
                     >
-                      <option value={10}>10 bài</option>
-                      <option value={20}>20 bài</option>
                       <option value={50}>50 bài</option>
+                      <option value={100}>100 bài (Chuẩn)</option>
+                      <option value={200}>200 bài</option>
                     </select>
                   </div>
                 </div>
