@@ -11,6 +11,7 @@ import KeywordsView from './components/KeywordsView';
 import AccountsView from './components/AccountsView';
 import LicenseLookupView from './components/LicenseLookupView';
 import EntitiesRadarView from './components/EntitiesRadarView';
+import TikTokMonitorView from './components/TikTokMonitorView';
 import { BookOpen, Scale, FileText, CheckCircle2, Sparkles, BellRing, Send } from 'lucide-react';
 
 export default function App() {
@@ -315,6 +316,11 @@ export default function App() {
 
           {/* Radar Điểm Nóng & Sổ Đen Cơ Sở Tab (Mô-đun 3) */}
           {currentTab === 'radar' && <EntitiesRadarView />}
+
+          {/* Giám Sát TikTok & Video Ngắn KOLs (Hướng C) */}
+          {currentTab === 'tiktok' && (
+            <TikTokMonitorView onOpenViolationModal={(v) => setSelectedItem(v)} />
+          )}
 
           {/* Keywords Management Tab */}
           {currentTab === 'keywords' && <KeywordsView />}

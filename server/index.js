@@ -52,6 +52,11 @@ import {
   getBlacklistEntities
 } from './entities.js';
 import { generateAdministrativeViolationRecordHtml } from './dossier.js';
+import {
+  HOT_TIKTOK_HASHTAGS,
+  scanTikTokAestheticVideos,
+  analyzeSpecificTikTokUrl
+} from './tiktok.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -229,6 +234,32 @@ app.get('/api/entities', (req, res) => {
 
 app.get('/api/entities/blacklist', (req, res) => {
   res.json(getBlacklistEntities());
+});
+
+// API: TikTok & KOLs Monitoring Module (Hướng C)
+app.get('/api/tiktok/hashtags', (req, res) => {
+  res.json(HOT_TIKTOK_HASHTAGS);
+});
+
+app.post('/api/tiktok/scan', async (req, res) => {
+  try {
+    const { keyword, hashtag, maxVideos } = req.body;
+    const result = await scanTikTokAestheticVideos({ keyword, hashtag, maxVideos });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/tiktok/analyze-url', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: 'Thiếu đường dẫn URL TikTok.' });
+    const result = await analyzeSpecificTikTokUrl(url);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // API: Reset / Clear database for Production

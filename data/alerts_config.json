@@ -1,0 +1,8 @@
+{
+  "telegramEnabled": false,
+  "telegramBotToken": "",
+  "telegramChatId": "",
+  "alertOnHighSeverityOnly": true,
+  "autoNotifyAutoPilot": true,
+  "lastAlertTime": null
+}

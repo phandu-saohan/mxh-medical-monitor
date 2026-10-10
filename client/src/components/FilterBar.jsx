@@ -25,8 +25,8 @@ export default function FilterBar({
               className="w-full text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none pr-8 cursor-pointer"
             >
               <option value="Facebook">Facebook</option>
+              <option value="TikTok">TikTok (Video ngắn)</option>
               <option value="Tất cả">Tất cả nền tảng</option>
-              <option value="TikTok">TikTok (Sắp có)</option>
               <option value="YouTube">YouTube (Sắp có)</option>
             </select>
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
