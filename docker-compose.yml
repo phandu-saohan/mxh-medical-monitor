@@ -8,6 +8,8 @@ services:
     environment:
       - PORT=3001
       - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-AIzaSyA6L4tWEQsrQ_CUdvw96DpAhAchVq2iEUc}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
       - META_ACCESS_TOKEN=${META_ACCESS_TOKEN:-}
     volumes:
       - ./data:/app/data

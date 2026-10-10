@@ -14,5 +14,7 @@ EXPOSE 3001
 
 ENV PORT=3001
 ENV NODE_ENV=production
+ENV GEMINI_API_KEY="AIzaSyA6L4tWEQsrQ_CUdvw96DpAhAchVq2iEUc"
+ENV GEMINI_MODEL="gemini-2.5-flash"
 
 CMD ["node", "server/index.js"]
