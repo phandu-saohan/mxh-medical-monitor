@@ -9,13 +9,15 @@ import {
   Settings,
   ShieldCheck,
   Bot,
-  Building2
+  Building2,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function Sidebar({ currentTab, setCurrentTab, violationCount = 0, onOpenCrawler }) {
   const menuItems = [
     { id: 'dashboard', label: 'Tổng quan', icon: LayoutDashboard },
     { id: 'violations', label: 'Danh sách vi phạm', icon: AlertOctagon, badge: violationCount },
+    { id: 'radar', label: 'Radar Cơ Sở & Sổ Đen', icon: ShieldAlert },
     { id: 'tracked', label: 'Bài viết / Video đã theo dõi', icon: FileVideo },
     { id: 'keywords', label: 'Theo dõi từ khóa', icon: Hash },
     { id: 'accounts', label: 'Tài khoản/Trang giám sát', icon: Users2 },

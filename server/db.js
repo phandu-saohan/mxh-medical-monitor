@@ -12,6 +12,7 @@ import {
   updateStatsInSupabase,
   fetchStatsFromSupabase
 } from './supabase.js';
+import { sendTelegramViolationAlert } from './alerts.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -475,6 +476,7 @@ export function addViolation(item) {
   list.unshift(cleanedItem);
   saveViolations(list);
   upsertViolationToSupabase(cleanedItem).catch(err => console.warn('[Supabase] Lỗi lưu vi phạm:', err.message));
+  sendTelegramViolationAlert(cleanedItem).catch(err => console.warn('[Telegram Alert Error]:', err.message));
   return cleanedItem;
 }
 

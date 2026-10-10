@@ -10,7 +10,8 @@ import CrawlerModal from './components/CrawlerModal';
 import KeywordsView from './components/KeywordsView';
 import AccountsView from './components/AccountsView';
 import LicenseLookupView from './components/LicenseLookupView';
-import { BookOpen, Scale, FileText, CheckCircle2, Sparkles } from 'lucide-react';
+import EntitiesRadarView from './components/EntitiesRadarView';
+import { BookOpen, Scale, FileText, CheckCircle2, Sparkles, BellRing, Send } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('dashboard');
@@ -47,6 +48,17 @@ export default function App() {
   const [aiModelInput, setAiModelInput] = useState('gemini-3.8-flash');
   const [isTestingAi, setIsTestingAi] = useState(false);
   const [aiMessage, setAiMessage] = useState(null);
+
+  // Telegram Alerts Configuration State (Mô-đun 1)
+  const [alertsConfig, setAlertsConfig] = useState({
+    telegramEnabled: false,
+    telegramBotToken: '',
+    telegramChatId: '',
+    alertOnHighSeverityOnly: true,
+    autoNotifyAutoPilot: true
+  });
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState(null);
 
   // Fetch dashboard statistics
   const fetchStats = () => {
@@ -105,7 +117,57 @@ export default function App() {
         if (data.model) setAiModelInput(data.model);
       })
       .catch(() => {});
+
+    // Fetch Telegram alerts config
+    fetch('/api/alerts/config')
+      .then((res) => res.json())
+      .then((data) => setAlertsConfig(data))
+      .catch(() => {});
   }, []);
+
+  const handleSaveAlertsConfig = async (e) => {
+    e?.preventDefault();
+    try {
+      const res = await fetch('/api/alerts/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alertsConfig)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramMessage({ type: 'success', text: data.message });
+      } else {
+        setTelegramMessage({ type: 'error', text: data.error || 'Lỗi lưu cấu hình.' });
+      }
+    } catch (err) {
+      setTelegramMessage({ type: 'error', text: 'Không thể kết nối máy chủ: ' + err.message });
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    setIsTestingTelegram(true);
+    setTelegramMessage(null);
+    try {
+      const res = await fetch('/api/alerts/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: alertsConfig.telegramBotToken,
+          chatId: alertsConfig.telegramChatId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramMessage({ type: 'success', text: data.message });
+      } else {
+        setTelegramMessage({ type: 'error', text: data.error || 'Không gửi được tin nhắn thử nghiệm.' });
+      }
+    } catch (err) {
+      setTelegramMessage({ type: 'error', text: 'Lỗi kiểm tra kết nối: ' + err.message });
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
 
   const handleSaveAiConfig = async (e) => {
     e?.preventDefault();
@@ -250,6 +312,9 @@ export default function App() {
               </div>
             </>
           )}
+
+          {/* Radar Điểm Nóng & Sổ Đen Cơ Sở Tab (Mô-đun 3) */}
+          {currentTab === 'radar' && <EntitiesRadarView />}
 
           {/* Keywords Management Tab */}
           {currentTab === 'keywords' && <KeywordsView />}
@@ -473,6 +538,111 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                </form>
+              </div>
+
+              {/* Cấu Hình Cảnh Báo Telegram Bot (24/7 Smart Alerts - Mô-đun 1) */}
+              <div className="border-t border-slate-200 pt-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                      <BellRing className="w-4 h-4 text-blue-600" />
+                      <span>Cảnh Báo Tự Động Qua Telegram Bot (24/7 Smart Alerts - Mô-đun 1)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Tự động đẩy thông báo vi phạm nghiêm trọng (xâm lấn không phép, thẩm mỹ chui) về nhóm chat của Đội Thanh tra ngay khi quét được.
+                    </p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {alertsConfig.telegramEnabled ? (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+                        Đang kích hoạt cảnh báo
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-300">
+                        Đang tạm dừng
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveAlertsConfig} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Telegram Bot Token:</label>
+                      <input
+                        type="text"
+                        placeholder="VD: 7123456789:AAH..."
+                        value={alertsConfig.telegramBotToken}
+                        onChange={(e) => setAlertsConfig({ ...alertsConfig, telegramBotToken: e.target.value })}
+                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700">Telegram Chat ID (hoặc Group ID):</label>
+                      <input
+                        type="text"
+                        placeholder="VD: -100123456789 hoặc 987654321"
+                        value={alertsConfig.telegramChatId}
+                        onChange={(e) => setAlertsConfig({ ...alertsConfig, telegramChatId: e.target.value })}
+                        className="w-full text-xs px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={alertsConfig.telegramEnabled}
+                          onChange={(e) => setAlertsConfig({ ...alertsConfig, telegramEnabled: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>Bật đẩy cảnh báo tức thời</span>
+                      </label>
+
+                      <label className="flex items-center space-x-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={alertsConfig.alertOnHighSeverityOnly}
+                          onChange={(e) => setAlertsConfig({ ...alertsConfig, alertOnHighSeverityOnly: e.target.checked })}
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>Chỉ cảnh báo vi phạm mức độ "Cao"</span>
+                      </label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={handleTestTelegram}
+                        disabled={isTestingTelegram || !alertsConfig.telegramBotToken || !alertsConfig.telegramChatId}
+                        className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center space-x-1"
+                      >
+                        <Send className="w-3 h-3 text-blue-600" />
+                        <span>{isTestingTelegram ? 'Đang gửi tin...' : 'Gửi Tin Thử Nghiệm'}</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
+                      >
+                        Lưu Cấu Hình Cảnh Báo
+                      </button>
+                    </div>
+                  </div>
+
+                  {telegramMessage && (
+                    <div className={`p-2.5 rounded-lg text-xs font-medium flex items-center space-x-2 ${
+                      telegramMessage.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+                    }`}>
+                      <span>{telegramMessage.type === 'success' ? '✅' : '⚠️'}</span>
+                      <span>{telegramMessage.text}</span>
+                    </div>
+                  )}
                 </form>
               </div>
 

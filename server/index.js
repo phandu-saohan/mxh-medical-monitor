@@ -41,6 +41,17 @@ import {
   verifyFacilityLicense
 } from './licenseLookup.js';
 import { generateAiKeywords } from './aiKeywords.js';
+import {
+  getAlertsConfig,
+  saveAlertsConfig,
+  testTelegramConnection
+} from './alerts.js';
+import { extractOcrFromImageUrl } from './ocr.js';
+import {
+  getEntityProfiles,
+  getBlacklistEntities
+} from './entities.js';
+import { generateAdministrativeViolationRecordHtml } from './dossier.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,6 +179,56 @@ app.get('/api/violations/:id/export', (req, res) => {
   const html = generateViolationReportHtml(item);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
+});
+
+// API: Official Sanction Record (Biên bản VPHC chuẩn Nghị định 118/2021/NĐ-CP)
+app.get('/api/violations/:id/sanction-record', (req, res) => {
+  const item = getViolations().find(v => v.id === req.params.id);
+  if (!item) return res.status(404).send('Không tìm thấy vi phạm.');
+  const html = generateAdministrativeViolationRecordHtml(item);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+});
+
+// API: Alerts Config & Telegram Testing (Mô-đun 1)
+app.get('/api/alerts/config', (req, res) => {
+  res.json(getAlertsConfig());
+});
+
+app.post('/api/alerts/config', (req, res) => {
+  const updated = saveAlertsConfig(req.body);
+  res.json({ success: true, config: updated, message: 'Đã lưu cấu hình cảnh báo thành công.' });
+});
+
+app.post('/api/alerts/test', async (req, res) => {
+  try {
+    const { token, chatId } = req.body;
+    const result = await testTelegramConnection(token, chatId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// API: Multimodal OCR Text Analysis (Mô-đun 2)
+app.post('/api/ocr/analyze', async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    if (!imageUrl) return res.status(400).json({ success: false, error: 'Thiếu đường dẫn hình ảnh (imageUrl).' });
+    const text = await extractOcrFromImageUrl(imageUrl);
+    res.json({ success: true, text });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API: Entity Profiles & Blacklist Radar (Mô-đun 3)
+app.get('/api/entities', (req, res) => {
+  res.json(getEntityProfiles());
+});
+
+app.get('/api/entities/blacklist', (req, res) => {
+  res.json(getBlacklistEntities());
 });
 
 // API: Reset / Clear database for Production
