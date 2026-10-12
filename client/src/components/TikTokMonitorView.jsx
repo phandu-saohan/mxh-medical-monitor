@@ -15,7 +15,12 @@ import {
   RefreshCw,
   Hash,
   Play,
-  UserCheck
+  UserCheck,
+  KeyRound,
+  ShieldCheck,
+  Unlink,
+  LogIn,
+  Info
 } from 'lucide-react';
 
 export default function TikTokMonitorView({ onOpenViolationModal }) {
@@ -28,10 +33,68 @@ export default function TikTokMonitorView({ onOpenViolationModal }) {
   const [scanResults, setScanResults] = useState(null);
   const [singleAnalysis, setSingleAnalysis] = useState(null);
 
+  // TikTok Account Connection State
+  const [sessionStatus, setSessionStatus] = useState({ connected: false, cookiesCount: 0, username: null });
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [cookieInput, setCookieInput] = useState('');
+  const [isSavingCookies, setIsSavingCookies] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState(null);
+
   useEffect(() => {
+    fetchSessionStatus();
     fetchHashtags();
     handleScanTag('reviewthammy');
   }, []);
+
+  const fetchSessionStatus = async () => {
+    try {
+      const res = await fetch('/api/tiktok/session-status');
+      const data = await res.json();
+      setSessionStatus(data);
+    } catch (e) {
+      console.error('Lỗi kiểm tra session TikTok:', e);
+    }
+  };
+
+  const handleSaveCookies = async (e) => {
+    e?.preventDefault();
+    if (!cookieInput.trim()) return;
+    setIsSavingCookies(true);
+    setConnectionMessage(null);
+    try {
+      const res = await fetch('/api/tiktok/save-cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookies: cookieInput.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConnectionMessage({ type: 'success', text: data.message });
+        setCookieInput('');
+        fetchSessionStatus();
+      } else {
+        setConnectionMessage({ type: 'error', text: data.error || 'Lỗi lưu cookie.' });
+      }
+    } catch (err) {
+      setConnectionMessage({ type: 'error', text: err.message });
+    } finally {
+      setIsSavingCookies(false);
+    }
+  };
+
+  const handleDisconnectSession = async () => {
+    if (!window.confirm('Bạn có chắc chắn muốn ngắt kết nối tài khoản TikTok này?')) return;
+    try {
+      const res = await fetch('/api/tiktok/disconnect-session', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setConnectionMessage({ type: 'success', text: 'Đã ngắt kết nối tài khoản TikTok thành công!' });
+        fetchSessionStatus();
+      }
+    } catch (err) {
+      alert('Lỗi ngắt kết nối: ' + err.message);
+    }
+  };
 
   const fetchHashtags = async () => {
     try {
@@ -123,6 +186,31 @@ export default function TikTokMonitorView({ onOpenViolationModal }) {
         </div>
 
         <div className="flex items-center space-x-2">
+          {sessionStatus.connected ? (
+            <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-bold text-emerald-800">
+                TikTok: Đã kết nối ({sessionStatus.cookiesCount} cookies)
+              </span>
+              <button
+                type="button"
+                onClick={handleDisconnectSession}
+                className="text-[10px] text-red-600 hover:text-red-800 font-bold ml-1 hover:underline cursor-pointer"
+                title="Hủy kết nối"
+              >
+                Ngắt
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowConnectModal(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-md shadow-rose-600/30 transition-all cursor-pointer"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Kết Nối Tài Khoản TikTok</span>
+            </button>
+          )}
+
           <span className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
             <Flame className="w-4 h-4 text-rose-500 mr-1.5 animate-pulse" />
             <span>TikTok Live Radar</span>
@@ -472,6 +560,112 @@ export default function TikTokMonitorView({ onOpenViolationModal }) {
           </div>
         )}
       </div>
+
+      {/* MODAL KẾT NỐI TÀI KHOẢN TIKTOK */}
+      {showConnectModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2 text-rose-600 font-bold text-base">
+                <KeyRound className="w-5 h-5" />
+                <span>Kết Nối Tài Khoản Giám Sát TikTok</span>
+              </div>
+              <button
+                onClick={() => {
+                  setShowConnectModal(false);
+                  setConnectionMessage(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-900 space-y-1.5">
+                <div className="font-bold flex items-center space-x-1.5">
+                  <ShieldCheck className="w-4 h-4 text-rose-600" />
+                  <span>Tại sao cần kết nối tài khoản TikTok?</span>
+                </div>
+                <p className="text-[11.5px] leading-relaxed text-slate-700">
+                  TikTok thường yêu cầu đăng nhập khi tìm kiếm nhiều video hoặc truy vấn sâu theo hashtag thẩm mỹ. Nạp cookie phiên tài khoản giúp hệ thống <strong>bỏ qua Captcha, rà soát 24/7 ổn định</strong> và đọc trọn vẹn bình luận, tương tác của các KOLs/Reviewer.
+                </p>
+              </div>
+
+              {connectionMessage && (
+                <div className={`p-3 rounded-xl text-xs font-semibold flex items-center space-x-2 ${
+                  connectionMessage.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  {connectionMessage.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                  )}
+                  <span>{connectionMessage.text}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCookies} className="space-y-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Dán Cookie Phiên TikTok (sessionid, sid_guard... hoặc JSON export):
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={cookieInput}
+                    onChange={(e) => setCookieInput(e.target.value)}
+                    placeholder="sessionid=abc123...; msToken=xyz...&#10;(Hoặc dán toàn bộ mảng JSON cookies từ extension Cookie-Editor)"
+                    className="w-full p-2.5 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:border-rose-500"
+                  />
+                  <div className="flex items-center justify-between mt-1 text-[10.5px] text-slate-400">
+                    <span>Cách lấy: Mở tiktok.com &gt; F12 &gt; Application &gt; Cookies</span>
+                    <a
+                      href="https://www.tiktok.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-rose-600 hover:underline font-semibold"
+                    >
+                      Mở TikTok.com ↗
+                    </a>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false);
+                      setConnectionMessage(null);
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingCookies || !cookieInput.trim()}
+                    className="px-5 py-2 bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/30 flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingCookies ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Đang lưu...</span>
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>Lưu &amp; Kích Hoạt Phiên TikTok</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

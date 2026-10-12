@@ -1,7 +1,133 @@
 import { chromium } from 'playwright';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { analyzeContentWithAi } from './analyzer.js';
 import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation } from './db.js';
+import { searchMedinetLicense } from './medinet.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const TIKTOK_USER_DATA_DIR = path.join(__dirname, '..', 'tiktok_session_data');
+const TIKTOK_STORAGE_STATE_FILE = path.join(TIKTOK_USER_DATA_DIR, 'storageState.json');
+
+/**
+ * Lấy trạng thái kết nối tài khoản TikTok hiện tại
+ */
+export function getTikTokSessionStatus() {
+  const hasSavedSession = fs.existsSync(TIKTOK_STORAGE_STATE_FILE);
+  let cookiesCount = 0;
+  let username = null;
+
+  if (hasSavedSession) {
+    try {
+      const state = JSON.parse(fs.readFileSync(TIKTOK_STORAGE_STATE_FILE, 'utf8'));
+      cookiesCount = state.cookies?.length || 0;
+      const sessionCookie = state.cookies?.find(c => c.name === 'sessionid' || c.name === 'sid_guard' || c.name === 'uid_tt');
+      if (sessionCookie) {
+        username = sessionCookie.value.slice(0, 10) + '...';
+      }
+    } catch {}
+  }
+
+  return {
+    connected: hasSavedSession && cookiesCount > 0,
+    cookiesCount,
+    username,
+    sessionFile: hasSavedSession ? 'storageState.json' : null
+  };
+}
+
+/**
+ * Lưu chuỗi Cookie hoặc JSON phiên đăng nhập TikTok
+ */
+export function saveTikTokCookies(rawInput) {
+  if (!rawInput || typeof rawInput !== 'string' || !rawInput.trim()) {
+    throw new Error('Vui lòng nhập chuỗi cookie hoặc phiên đăng nhập TikTok.');
+  }
+
+  if (!fs.existsSync(TIKTOK_USER_DATA_DIR)) {
+    fs.mkdirSync(TIKTOK_USER_DATA_DIR, { recursive: true });
+  }
+
+  const cookieList = [];
+  const trimmed = rawInput.trim();
+
+  // Trường hợp 1: Nhập JSON mảng cookie từ tiện ích Cookie Editor / J2Team
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      for (const c of parsed) {
+        if (c.name && c.value) {
+          cookieList.push({
+            name: c.name,
+            value: c.value,
+            domain: c.domain || '.tiktok.com',
+            path: c.path || '/',
+            expires: -1,
+            httpOnly: c.httpOnly ?? (c.name === 'sessionid' || c.name === 'sid_guard'),
+            secure: true,
+            sameSite: 'Lax'
+          });
+        }
+      }
+    } catch {}
+  }
+
+  // Trường hợp 2: Nhập chuỗi cookie chuẩn "name=value; name2=value2" từ F12 Network / Application
+  if (cookieList.length === 0) {
+    const pairs = trimmed.split(';');
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx > -1) {
+        const name = pair.slice(0, idx).trim();
+        const value = pair.slice(idx + 1).trim();
+        if (name && value) {
+          cookieList.push({
+            name,
+            value,
+            domain: '.tiktok.com',
+            path: '/',
+            expires: -1,
+            httpOnly: name === 'sessionid' || name === 'sid_guard',
+            secure: true,
+            sameSite: 'Lax'
+          });
+        }
+      }
+    }
+  }
+
+  if (cookieList.length === 0) {
+    throw new Error('Không tìm thấy cookie hợp lệ. Định dạng mẫu: sessionid=...; msToken=... (hoặc JSON export từ tiện ích)');
+  }
+
+  const storageState = {
+    cookies: cookieList,
+    origins: []
+  };
+
+  fs.writeFileSync(TIKTOK_STORAGE_STATE_FILE, JSON.stringify(storageState, null, 2), 'utf-8');
+
+  return {
+    success: true,
+    message: `Đã kết nối và lưu thành công ${cookieList.length} cookies phiên tài khoản TikTok!`,
+    cookiesCount: cookieList.length
+  };
+}
+
+/**
+ * Xóa phiên kết nối tài khoản TikTok
+ */
+export function disconnectTikTokSession() {
+  if (fs.existsSync(TIKTOK_STORAGE_STATE_FILE)) {
+    try {
+      fs.unlinkSync(TIKTOK_STORAGE_STATE_FILE);
+    } catch {}
+  }
+  return { success: true, message: 'Đã hủy kết nối tài khoản TikTok.' };
+}
 
 /**
  * Danh sách Hashtag thẩm mỹ nóng nhất trên TikTok cần đưa vào diện giám sát đặc biệt
@@ -110,10 +236,21 @@ export async function scanTikTokAestheticVideos(options = {}) {
       ]
     });
 
-    const context = await browser.newContext({
+    const contextOptions = {
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 800 }
-    });
+    };
+
+    if (fs.existsSync(TIKTOK_STORAGE_STATE_FILE)) {
+      try {
+        contextOptions.storageState = TIKTOK_STORAGE_STATE_FILE;
+        console.log('[TikTok Monitor] Đã kích hoạt phiên tài khoản TikTok đã kết nối (storageState).');
+      } catch (eState) {
+        console.warn('[TikTok Monitor Warning]: Không thể đọc storageState:', eState.message);
+      }
+    }
+
+    const context = await browser.newContext(contextOptions);
 
     const page = await context.newPage();
     const searchUrl = hashtag
@@ -285,9 +422,16 @@ export async function analyzeSpecificTikTokUrl(videoUrl) {
       args: ['--disable-blink-features=AutomationControlled', '--no-sandbox']
     });
 
-    const page = await browser.newPage({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-    });
+    const contextOptions = {
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    };
+    if (fs.existsSync(TIKTOK_STORAGE_STATE_FILE)) {
+      try {
+        contextOptions.storageState = TIKTOK_STORAGE_STATE_FILE;
+      } catch {}
+    }
+    const context = await browser.newContext(contextOptions);
+    const page = await context.newPage();
 
     await page.goto(videoUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(3000);

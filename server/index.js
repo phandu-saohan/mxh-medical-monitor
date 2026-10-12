@@ -59,7 +59,10 @@ import { generateAdministrativeViolationRecordHtml } from './dossier.js';
 import {
   HOT_TIKTOK_HASHTAGS,
   scanTikTokAestheticVideos,
-  analyzeSpecificTikTokUrl
+  analyzeSpecificTikTokUrl,
+  getTikTokSessionStatus,
+  saveTikTokCookies,
+  disconnectTikTokSession
 } from './tiktok.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -260,6 +263,30 @@ app.post('/api/tiktok/analyze-url', async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ success: false, error: 'Thiếu đường dẫn URL TikTok.' });
     const result = await analyzeSpecificTikTokUrl(url);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API: TikTok Account Session Management
+app.get('/api/tiktok/session-status', (req, res) => {
+  res.json(getTikTokSessionStatus());
+});
+
+app.post('/api/tiktok/save-cookies', (req, res) => {
+  try {
+    const { cookies } = req.body;
+    const result = saveTikTokCookies(cookies);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/tiktok/disconnect-session', (req, res) => {
+  try {
+    const result = disconnectTikTokSession();
     res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
