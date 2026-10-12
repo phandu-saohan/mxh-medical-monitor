@@ -12,6 +12,7 @@ import AccountsView from './components/AccountsView';
 import LicenseLookupView from './components/LicenseLookupView';
 import EntitiesRadarView from './components/EntitiesRadarView';
 import TikTokMonitorView from './components/TikTokMonitorView';
+import MetaAdsView from './components/MetaAdsView';
 import { BookOpen, Scale, FileText, CheckCircle2, Sparkles, BellRing, Send } from 'lucide-react';
 
 export default function App() {
@@ -316,6 +317,11 @@ export default function App() {
 
           {/* Radar Điểm Nóng & Sổ Đen Cơ Sở Tab (Mô-đun 3) */}
           {currentTab === 'radar' && <EntitiesRadarView />}
+
+          {/* Quét Tất Cả Các Quảng Cáo Thư Viện Quảng Cáo Meta (Official Meta Ad Library API) */}
+          {currentTab === 'meta-ads' && (
+            <MetaAdsView onOpenViolationModal={(v) => setSelectedItem(v)} />
+          )}
 
           {/* Giám Sát TikTok & Video Ngắn KOLs (Hướng C) */}
           {currentTab === 'tiktok' && (

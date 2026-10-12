@@ -1,7 +1,8 @@
 import { chromium } from 'playwright';
-import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
+import { analyzeContent, analyzeContentWithAi, isCosmeticRelated } from './analyzer.js';
 import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation } from './db.js';
+import { searchMedinetLicense } from './medinet.js';
 
 /**
  * Meta Ad Library (Thư viện quảng cáo Meta) Production Integration
@@ -108,6 +109,11 @@ async function processMetaAds(ads, keyword) {
     const author = ad.page_name || 'Đơn vị quảng cáo Meta';
     const sampleMedia = 'https://images.unsplash.com/photo-1512496015851-a90fb38ba796?auto=format&fit=crop&w=600&h=400&q=80';
 
+    const combinedText = `${author} ${text}`;
+    if (!isCosmeticRelated(combinedText)) {
+      continue;
+    }
+
     let autoOcrText = null;
     try {
       autoOcrText = await extractOcrFromImageUrl(sampleMedia);
@@ -122,6 +128,16 @@ async function processMetaAds(ads, keyword) {
       ocrText: autoOcrText
     });
     if (analysis.isViolation) {
+      // Tự động đối soát cổng GPHĐ Sở Y Tế Medinet TP.HCM
+      let medinetCheck = null;
+      if (author && author.trim() && !/đơn vị quảng cáo meta|facebook/i.test(author)) {
+        try {
+          medinetCheck = await searchMedinetLicense(author, { limit: 3 });
+        } catch (eMedinet) {
+          console.warn('[Meta Ads Medinet Check Warning]:', eMedinet.message);
+        }
+      }
+
       const item = {
         id: `ad-real-${Date.now().toString().slice(-6)}-${i}`,
         timestamp: dateFormatted,
@@ -129,7 +145,7 @@ async function processMetaAds(ads, keyword) {
         platform: 'Facebook (Meta Ad Library)',
         author,
         authorHandle: `@${author.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-        followers: 'Đang chạy quảng cáo tài trợ',
+        followers: 'Đang chạy quảng cáo tài trợ (Sponsored Ads)',
         avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&h=120&q=80',
         content: text,
         postType: 'Video',
@@ -144,7 +160,15 @@ async function processMetaAds(ads, keyword) {
         violationDetails: analysis.violationDetails,
         legalBasis: analysis.legalBasis,
         recommendations: analysis.recommendations,
-        notes: `Phát hiện thực tế từ Thư viện quảng cáo Meta Ad Library với từ khóa "${keyword}"`
+        medinetVerification: medinetCheck ? {
+          checkedAt: new Date().toISOString(),
+          found: medinetCheck.found,
+          count: medinetCheck.count,
+          facilities: medinetCheck.facilities,
+          summary: medinetCheck.summary,
+          directPortalUrl: medinetCheck.directPortalUrl
+        } : null,
+        notes: `Phát hiện thực tế từ Thư viện quảng cáo Meta Ad Library (Quảng cáo trả phí) với từ khóa "${keyword}"`
       };
 
       addViolation(item);
