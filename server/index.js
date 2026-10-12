@@ -43,6 +43,7 @@ import {
   bulkImportLicensedFacilities,
   parseCsvFacilitiesText
 } from './licenseLookup.js';
+import { searchMedinetLicense } from './medinet.js';
 import { generateAiKeywords } from './aiKeywords.js';
 import {
   getAlertsConfig,
@@ -464,6 +465,46 @@ app.get('/api/license/lookup', (req, res) => {
   const { name, city, serviceClaim } = req.query;
   const result = verifyFacilityLicense(name, city, serviceClaim);
   res.json(result);
+});
+
+// API Live: Tra cứu trực tiếp Cổng SYT TP.HCM (tracuu.medinet.org.vn)
+app.get('/api/license/medinet-lookup', async (req, res) => {
+  try {
+    const { name, query } = req.query;
+    const targetQuery = query || name || '';
+    const result = await searchMedinetLicense(targetQuery);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// API Live: Kiểm tra giấy phép trên Cổng Medinet cho 1 hồ sơ vi phạm cụ thể và cập nhật vào hồ sơ
+app.post('/api/violations/:id/verify-medinet', async (req, res) => {
+  try {
+    const violations = getViolations();
+    const item = violations.find(v => v.id === req.params.id);
+    if (!item) return res.status(404).json({ success: false, error: 'Không tìm thấy hồ sơ vi phạm.' });
+
+    const queryTarget = req.body?.author || item.author;
+    const result = await searchMedinetLicense(queryTarget);
+
+    // Cập nhật trường medinetVerification vào hồ sơ vi phạm
+    const updated = updateViolation(item.id, {
+      medinetVerification: {
+        checkedAt: new Date().toISOString(),
+        found: result.found,
+        count: result.count,
+        facilities: result.facilities,
+        summary: result.summary,
+        directPortalUrl: result.directPortalUrl
+      }
+    });
+
+    res.json({ success: true, result, violation: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.get('/api/license/facilities', (req, res) => {

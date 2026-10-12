@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
 import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation, getViolations, incrementScannedCount } from './db.js';
+import { searchMedinetLicense } from './medinet.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -615,6 +616,21 @@ export async function runScrapeAndInspect(options = {}) {
       });
 
       if (analysis.isViolation) {
+        // TỰ ĐỘNG TRA CỨU GIẤY PHÉP TRÊN CỔNG SYT TP.HCM (tracuu.medinet.org.vn)
+        let medinetCheck = null;
+        if (p.author && p.author.trim() && !/cơ sở thẩm mỹ facebook|hội|nhóm|tuyển mẫu/i.test(p.author)) {
+          try {
+            medinetCheck = await searchMedinetLicense(p.author, { limit: 3 });
+            if (medinetCheck?.found) {
+              logMessage(`[Cổng SYT Medinet] Phát hiện ${medinetCheck.count} GPHĐ liên quan đến "${p.author}" trên tracuu.medinet.org.vn`, 'info');
+            } else {
+              logMessage(`[Cổng SYT Medinet] KHÔNG TÌM THẤY GPHĐ của "${p.author}" trên tracuu.medinet.org.vn -> Củng cố vi phạm không phép`, 'warning');
+            }
+          } catch (eMedinet) {
+            console.warn('[Medinet Auto Check Warning]:', eMedinet.message);
+          }
+        }
+
         const item = {
           id: `vio-real-${Date.now().toString().slice(-6)}-${i}`,
           timestamp: dateFormatted,
@@ -640,6 +656,14 @@ export async function runScrapeAndInspect(options = {}) {
           violationDetails: analysis.violationDetails,
           legalBasis: analysis.legalBasis,
           recommendations: analysis.recommendations,
+          medinetVerification: medinetCheck ? {
+            checkedAt: new Date().toISOString(),
+            found: medinetCheck.found,
+            count: medinetCheck.count,
+            facilities: medinetCheck.facilities,
+            summary: medinetCheck.summary,
+            directPortalUrl: medinetCheck.directPortalUrl
+          } : null,
           notes: `Tự động phát hiện khi rà soát thật từ khóa "${p.matchedKeyword || keywordList[0]}" (${categoryName ? `Chuyên mục: ${categoryName} - ` : ''}${p.authorType === 'Page' ? 'Trang Fanpage' : 'Hội Nhóm'})`
         };
 

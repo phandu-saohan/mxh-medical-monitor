@@ -48,6 +48,8 @@ export default function ViolationDetailModal({
   const [isArchivingVault, setIsArchivingVault] = useState(false);
   const [evidence, setEvidence] = useState(item?.evidence || null);
   const [licenseCheck, setLicenseCheck] = useState(null);
+  const [medinetCheck, setMedinetCheck] = useState(item?.medinetVerification || null);
+  const [isCheckingMedinet, setIsCheckingMedinet] = useState(false);
   const [ocrText, setOcrText] = useState(item?.ocrText || null);
   const [isScanningOcr, setIsScanningOcr] = useState(false);
 
@@ -55,13 +57,32 @@ export default function ViolationDetailModal({
     setStatus(item?.status || 'Chờ xử lý');
     setEvidence(item?.evidence || null);
     setOcrText(item?.ocrText || null);
+    setMedinetCheck(item?.medinetVerification || null);
 
-    // Verify facility license against database
+    // Verify facility license against local database
     if (item?.author) {
       fetch(`/api/license/lookup?name=${encodeURIComponent(item.author)}`)
         .then((res) => res.json())
         .then((data) => setLicenseCheck(data))
         .catch(() => {});
+    }
+
+    // Tự động kiểm tra trực tiếp Cổng SYT TP.HCM (tracuu.medinet.org.vn) nếu chưa có kết quả
+    if (item?.author && !item?.medinetVerification && !/hội|nhóm|group|cộng đồng|tuyển mẫu/i.test(item.author)) {
+      setIsCheckingMedinet(true);
+      fetch(`/api/violations/${item.id}/verify-medinet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: item.author })
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.result) {
+            setMedinetCheck(data.result);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsCheckingMedinet(false));
     }
 
     // TỰ ĐỘNG ĐỌC VÀ BÓC TÁCH CHỮ TỪ HÌNH ẢNH / VIDEO (KHÔNG CẦN CHỜ ĐỒNG Ý)
@@ -83,6 +104,30 @@ export default function ViolationDetailModal({
         .finally(() => setIsScanningOcr(false));
     }
   }, [item]);
+
+  const handleRecheckMedinet = async () => {
+    if (!item?.author) return;
+    setIsCheckingMedinet(true);
+    try {
+      const res = await fetch(`/api/violations/${item.id}/verify-medinet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: item.author })
+      });
+      const data = await res.json();
+      if (data.success && data.result) {
+        setMedinetCheck(data.result);
+        alert(data.result.found
+          ? `Đã tìm thấy ${data.result.count} cơ sở được cấp phép trên tracuu.medinet.org.vn!`
+          : `Không tìm thấy giấy phép hoạt động nào của cơ sở "${item.author}" trên Cổng Sở Y tế TP.HCM! Củng cố vi phạm không phép.`
+        );
+      }
+    } catch (e) {
+      alert(`Lỗi tra cứu Medinet: ${e.message}`);
+    } finally {
+      setIsCheckingMedinet(false);
+    }
+  };
 
   const handleScanOcr = async () => {
     const targetImg = item?.mediaUrl || item?.avatar;
@@ -411,7 +456,7 @@ export default function ViolationDetailModal({
           )}
         </div>
 
-        {/* Giai đoạn 3: Đối Soát Giấy Phép Hoạt Động (GPHĐ) */}
+        {/* Giai đoạn 3: Đối Soát Giấy Phép Hoạt Động (GPHĐ) Nội Bộ */}
         {licenseCheck && (
           <div className={`rounded-xl p-3.5 border text-xs space-y-1.5 ${
             licenseCheck.isLicensed 
@@ -421,7 +466,7 @@ export default function ViolationDetailModal({
             <div className="flex items-center justify-between font-bold">
               <span className="flex items-center space-x-1.5">
                 <Building2 className="w-4 h-4" />
-                <span>Đối soát GPHĐ Cơ sở Y tế (GĐ 3)</span>
+                <span>Đối soát CSDL Danh bạ Nội bộ (GĐ 3)</span>
               </span>
               <span className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
                 licenseCheck.isLicensed ? 'bg-emerald-200 text-emerald-800' : 'bg-red-200 text-red-800'
@@ -434,6 +479,116 @@ export default function ViolationDetailModal({
             </p>
           </div>
         )}
+
+        {/* TÍCH HỢP TRỰC TIẾP: CỔNG TRA CỨU HÀNH NGHỀ Y DƯỢC SỞ Y TẾ TP.HCM (tracuu.medinet.org.vn) */}
+        <div className="bg-white rounded-xl border border-blue-200 p-3.5 space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold flex items-center space-x-1.5 text-blue-900 text-xs">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              <span>Đối Soát Trực Tiếp Cổng SYT TP.HCM (tracuu.medinet.org.vn)</span>
+            </span>
+            <div className="flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={handleRecheckMedinet}
+                disabled={isCheckingMedinet}
+                className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 rounded text-[10px] font-bold flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${isCheckingMedinet ? 'animate-spin' : ''}`} />
+                <span>{isCheckingMedinet ? 'Đang tra cứu...' : 'Tra Cứu Lại'}</span>
+              </button>
+              <a
+                href="https://tracuu.medinet.org.vn"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10.5px] text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-0.5 underline"
+              >
+                <span>Mở Medinet</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          </div>
+
+          {medinetCheck ? (
+            <div className={`p-2.5 rounded-lg border text-[11px] space-y-1.5 ${
+              medinetCheck.found
+                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50/80 border-rose-200 text-rose-950'
+            }`}>
+              <div className="flex items-center justify-between font-bold">
+                <span className="flex items-center space-x-1">
+                  {medinetCheck.found ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                  )}
+                  <span>{medinetCheck.summary}</span>
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                  medinetCheck.found ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                }`}>
+                  {medinetCheck.found ? 'ĐÃ CẤP PHÉP' : 'KHÔNG CÓ GPHĐ'}
+                </span>
+              </div>
+
+              {medinetCheck.found && medinetCheck.facilities?.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {medinetCheck.facilities.map((fac, idx) => (
+                    <div key={idx} className="bg-white p-2 rounded border border-emerald-200 space-y-1 shadow-xs">
+                      <div className="font-bold text-slate-800 flex items-center justify-between">
+                        <span>{fac.facilityName}</span>
+                        {fac.detailUrl && (
+                          <a
+                            href={fac.detailUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline flex items-center space-x-0.5"
+                          >
+                            <span>Hồ sơ chi tiết</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 text-[10.5px] text-slate-600">
+                        <span><strong>Số GPHĐ:</strong> {fac.licenseNumber || fac.licenseInfo}</span>
+                        {fac.issueDate && <span><strong>Ngày cấp:</strong> {fac.issueDate}</span>}
+                        <span><strong>Trạng thái:</strong> <span className={fac.status?.includes('Ngưng') ? 'text-red-600 font-bold' : 'text-emerald-700 font-bold'}>{fac.status}</span></span>
+                      </div>
+                      {fac.address && (
+                        <div className="text-[10px] text-slate-500">
+                          <strong>Địa chỉ:</strong> {fac.address}
+                        </div>
+                      )}
+                      {fac.sanctionNote && (
+                        <div className="text-[10px] text-rose-700 font-bold bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          {fac.sanctionNote}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!medinetCheck.found && (
+                <p className="text-[10.5px] text-rose-700 leading-relaxed font-medium">
+                  Cơ sở <strong>"{item?.author}"</strong> không tồn tại trong danh mục khám bệnh, chữa bệnh được Sở Y tế TP.HCM phê duyệt. Hành vi quảng cáo dịch vụ xâm lấn (tiêm filler, botox, phẫu thuật) cấu thành hành vi <strong>hoạt động không phép</strong> theo Nghị định 96/2023/NĐ-CP và Nghị định 117/2020/NĐ-CP.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-500 flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-200">
+              <span>{isCheckingMedinet ? 'Đang kết nối cổng tracuu.medinet.org.vn...' : 'Chưa thực hiện kiểm tra giấy phép trực tiếp đối với cơ sở này.'}</span>
+              <button
+                type="button"
+                onClick={handleRecheckMedinet}
+                disabled={isCheckingMedinet}
+                className="text-blue-600 font-bold underline cursor-pointer hover:text-blue-800"
+              >
+                Kiểm tra ngay
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Phân tích AI Card */}
         <div className="bg-slate-50 rounded-xl p-4 border border-slate-200/90 space-y-3">

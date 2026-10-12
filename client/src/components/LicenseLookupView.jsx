@@ -29,6 +29,11 @@ export default function LicenseLookupView() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
 
+  // Live Medinet Portal Search State (tracuu.medinet.org.vn)
+  const [medinetQuery, setMedinetQuery] = useState('');
+  const [isSearchingMedinet, setIsSearchingMedinet] = useState(false);
+  const [medinetLiveResult, setMedinetLiveResult] = useState(null);
+
   // Form state for adding new licensed facility
   const [newFacility, setNewFacility] = useState({
     name: '',
@@ -51,6 +56,22 @@ export default function LicenseLookupView() {
   useEffect(() => {
     fetchFacilities();
   }, [selectedCity]);
+
+  const handleMedinetLiveSearch = async (e) => {
+    e.preventDefault();
+    if (!medinetQuery.trim()) return;
+    setIsSearchingMedinet(true);
+    setMedinetLiveResult(null);
+    try {
+      const res = await fetch(`/api/license/medinet-lookup?query=${encodeURIComponent(medinetQuery.trim())}`);
+      const data = await res.json();
+      setMedinetLiveResult(data);
+    } catch (err) {
+      alert(`Lỗi tra cứu Cổng Medinet: ${err.message}`);
+    } finally {
+      setIsSearchingMedinet(false);
+    }
+  };
 
   const handleTestLookup = (e) => {
     e.preventDefault();
@@ -207,11 +228,110 @@ export default function LicenseLookupView() {
         </div>
       </div>
 
-      {/* Tra cứu nhanh một cơ sở bất kỳ */}
+      {/* TÍCH HỢP TRỰC TIẾP: CỔNG TRA CỨU HÀNH NGHỀ Y DƯỢC SỞ Y TẾ TP.HCM (tracuu.medinet.org.vn) */}
+      <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-5 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold flex items-center space-x-2 text-cyan-300">
+              <Building2 className="w-4 h-4 text-cyan-400" />
+              <span>Cổng Tra Cứu Hành Nghề Y Dược TP.HCM (tracuu.medinet.org.vn)</span>
+            </h3>
+            <p className="text-[11px] text-slate-300 mt-0.5">
+              Tra cứu trực tuyến thời gian thực vào CSDL cấp phép của Sở Y tế TP.HCM để xác minh GPHĐ, người phụ trách chuyên môn và trạng thái hoạt động.
+            </p>
+          </div>
+          <a
+            href="https://tracuu.medinet.org.vn"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-cyan-300 hover:text-white underline font-semibold flex items-center space-x-1 shrink-0"
+          >
+            <span>Mở Cổng Medinet Gốc</span>
+            <Search className="w-3 h-3" />
+          </a>
+        </div>
+
+        <form onSubmit={handleMedinetLiveSearch} className="flex flex-wrap gap-2">
+          <input
+            type="text"
+            value={medinetQuery}
+            onChange={(e) => setMedinetQuery(e.target.value)}
+            placeholder="Nhập tên cơ sở hoặc số GPHĐ (ví dụ: Keangnam Korea, Kangnam, 06303/HCM-GPHĐ...)"
+            className="flex-1 min-w-[260px] px-3.5 py-2.5 bg-slate-800/90 border border-slate-700 rounded-xl text-xs font-semibold text-white placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-cyan-400"
+          />
+          <button
+            type="submit"
+            disabled={isSearchingMedinet}
+            className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-black transition-all shadow-md cursor-pointer disabled:opacity-50 flex items-center space-x-1.5 shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSearchingMedinet ? 'animate-spin' : ''}`} />
+            <span>{isSearchingMedinet ? 'Đang tra cứu...' : 'Tra Cứu Cổng Medinet'}</span>
+          </button>
+        </form>
+
+        {medinetLiveResult && (
+          <div className={`p-4 rounded-xl border text-xs space-y-2 ${
+            medinetLiveResult.found
+              ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-100'
+              : 'bg-rose-950/80 border-rose-500/40 text-rose-100'
+          }`}>
+            <div className="flex items-center justify-between font-bold text-sm">
+              <span className="flex items-center space-x-2">
+                {medinetLiveResult.found ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-400" />
+                )}
+                <span>{medinetLiveResult.summary}</span>
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                medinetLiveResult.found ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+              }`}>
+                {medinetLiveResult.found ? 'ĐÃ CẤP PHÉP' : 'KHÔNG CÓ GPHĐ'}
+              </span>
+            </div>
+
+            {medinetLiveResult.found && medinetLiveResult.facilities?.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                {medinetLiveResult.facilities.map((fac, idx) => (
+                  <div key={idx} className="bg-slate-900/90 p-3 rounded-lg border border-slate-700 text-slate-200 space-y-1">
+                    <div className="font-bold text-cyan-200 flex items-center justify-between">
+                      <span className="line-clamp-1">{fac.facilityName}</span>
+                      {fac.detailUrl && (
+                        <a
+                          href={fac.detailUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-cyan-400 hover:underline shrink-0 ml-1"
+                        >
+                          Chi tiết &gt;
+                        </a>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-300 space-y-0.5">
+                      <div><strong>Số GPHĐ:</strong> <span className="font-mono text-cyan-300">{fac.licenseNumber || fac.licenseInfo}</span></div>
+                      {fac.issueDate && <div><strong>Ngày cấp:</strong> {fac.issueDate}</div>}
+                      <div><strong>Trạng thái:</strong> <span className={fac.status?.includes('Ngưng') ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>{fac.status}</span></div>
+                      {fac.address && <div className="text-[10px] text-slate-400"><strong>Địa chỉ:</strong> {fac.address}</div>}
+                    </div>
+                    {fac.sanctionNote && (
+                      <div className="text-[10px] text-rose-300 font-bold bg-rose-950/60 p-1.5 rounded border border-rose-800 mt-1">
+                        {fac.sanctionNote}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tra cứu nhanh một cơ sở bất kỳ (Danh bạ Nội bộ) */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-xs space-y-4">
         <h3 className="text-sm font-bold text-slate-800 flex items-center space-x-2">
           <Search className="w-4 h-4 text-blue-600" />
-          <span>Kiểm Tra Nhanh Tên Cơ Sở &amp; Dịch Vụ Quảng Cáo (Phát hiện Vượt Phạm Vi Chuyên Môn)</span>
+          <span>Kiểm Tra Nhanh Danh Bạ Nội Bộ &amp; Dịch Vụ Quảng Cáo (Phát hiện Vượt Phạm Vi Chuyên Môn)</span>
         </h3>
 
         <form onSubmit={handleTestLookup} className="flex flex-wrap gap-3">
