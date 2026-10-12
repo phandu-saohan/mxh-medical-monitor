@@ -271,13 +271,16 @@ export function cleanFacebookText(rawText, author = '') {
 }
 
 /**
- * Step 2, 3, 4 (PRODUCTION): Rà soát thật 100% trên Facebook (Đơn từ khóa HOẶC Quét hàng loạt toàn bộ Chuyên mục)
+ * Step 2, 3, 4 (PRODUCTION): Rà soát thật 100% trên Facebook (Đơn từ khóa HOẶC Quét hàng loạt toàn bộ Chuyên mục, Định vị Địa bàn)
  */
 export async function runScrapeAndInspect(options = {}) {
   const {
     keyword,
     keywords = [],
     categoryName = '',
+    location = 'TP.HCM',
+    district = '',
+    ward = '',
     maxPosts = 100
   } = options;
 
@@ -298,6 +301,10 @@ export async function runScrapeAndInspect(options = {}) {
     throw new Error('Đang có tiến trình rà soát đang chạy.');
   }
 
+  // Chuỗi định vị địa bàn cụ thể (Ví dụ: "Phường Bến Thành, Quận 1, TP.HCM" hoặc "TP.HCM")
+  const locationLabelParts = [ward, district, location].filter(Boolean);
+  const locationLabel = locationLabelParts.length > 0 ? locationLabelParts.join(', ') : 'TP.HCM';
+
   const isBatchMode = keywordList.length > 1;
   const initialDisplayKeyword = isBatchMode
     ? `${categoryName ? `[${categoryName}] ` : ''}${keywordList[0]} (+${keywordList.length - 1} từ khác)`
@@ -307,6 +314,7 @@ export async function runScrapeAndInspect(options = {}) {
   currentCrawlerStatus.step = 'SEARCHING';
   currentCrawlerStatus.currentKeyword = initialDisplayKeyword;
   currentCrawlerStatus.categoryName = categoryName || null;
+  currentCrawlerStatus.location = locationLabel;
   currentCrawlerStatus.totalKeywords = keywordList.length;
   currentCrawlerStatus.currentKeywordIndex = 1;
   currentCrawlerStatus.progress = 5;
@@ -314,10 +322,11 @@ export async function runScrapeAndInspect(options = {}) {
   currentCrawlerStatus.logs = [];
 
   if (isBatchMode) {
-    logMessage(`⚡ [QUÉT TOÀN BỘ CHUYÊN MỤC] Khởi động quét loạt ${keywordList.length} từ khóa thuộc chuyên mục "${categoryName || 'Y tế Thẩm mỹ'}": ${keywordList.join(', ')}`, 'info');
+    logMessage(`⚡ [QUÉT CHUYÊN MỤC ĐỊA BÀN: ${locationLabel}] Khởi động quét loạt ${keywordList.length} từ khóa thuộc chuyên mục "${categoryName || 'Y tế Thẩm mỹ'}": ${keywordList.join(', ')}`, 'info');
   } else {
-    logMessage(`[PRODUCTION] Khởi động rà soát mạng xã hội với từ khóa y tế: "${keywordList[0]}" (Mục tiêu: ${maxPosts} mục)`, 'info');
+    logMessage(`[PRODUCTION - ĐỊA BÀN: ${locationLabel}] Khởi động rà soát mạng xã hội với từ khóa: "${keywordList[0]}" (Mục tiêu: ${maxPosts} mục)`, 'info');
   }
+  logMessage(`Phạm vi rà soát: Trọng tâm địa bàn ${locationLabel} - Chỉ lấy dịch vụ thẩm mỹ của phòng khám/bệnh viện.`, 'info');
   logMessage('Chiến lược: TÁI SỬ DỤNG TRÌNH DUYỆT - ƯU TIÊN FANPAGE TRƯỚC HỘI NHÓM - BÓC TÁCH ĐA PHƯƠNG TIỆN', 'info');
   logMessage('Căn cứ pháp lý: Luật KCB 15/2023/QH15, NĐ 96/2023/NĐ-CP, Luật QC 16/2012, NĐ 117/2020/NĐ-CP, NĐ 38/2021/NĐ-CP', 'info');
 
@@ -372,17 +381,21 @@ export async function runScrapeAndInspect(options = {}) {
 
     for (let kIdx = 0; kIdx < keywordList.length; kIdx++) {
       const currentKw = keywordList[kIdx];
-      currentCrawlerStatus.currentKeyword = currentKw;
+      // Nếu có chọn vị trí (TP.HCM hoặc Phường/Quận), ghép vào từ khóa tìm kiếm để định vị địa bàn chính xác
+      const locationSuffix = district || ward ? ` ${[ward, district].filter(Boolean).join(' ')}` : (location ? ` ${location}` : '');
+      const searchKw = `${currentKw}${locationSuffix}`.trim();
+
+      currentCrawlerStatus.currentKeyword = searchKw;
       currentCrawlerStatus.currentKeywordIndex = kIdx + 1;
       const baseProgress = Math.round((kIdx / keywordList.length) * 75);
       currentCrawlerStatus.progress = Math.max(10, baseProgress);
       broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
 
-      logMessage(`\n--- [TỪ KHÓA ${kIdx + 1}/${keywordList.length}] Rà soát: "${currentKw}" ---`, 'info');
+      logMessage(`\n--- [TỪ KHÓA ${kIdx + 1}/${keywordList.length}] Rà soát: "${searchKw}" (Địa bàn: ${locationLabel}) ---`, 'info');
 
-      // GIAI ĐOẠN 1: Quét Fanpage liên quan đến currentKw
-      const pagesSearchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(currentKw)}`;
-      logMessage(`[${currentKw}] Rà soát danh mục Trang Fanpage: ${pagesSearchUrl}`, 'info');
+      // GIAI ĐOẠN 1: Quét Fanpage liên quan đến searchKw
+      const pagesSearchUrl = `https://www.facebook.com/search/pages/?q=${encodeURIComponent(searchKw)}`;
+      logMessage(`[${searchKw}] Rà soát danh mục Trang Fanpage: ${pagesSearchUrl}`, 'info');
 
       try {
         await page.goto(pagesSearchUrl, { waitUntil: 'domcontentloaded', timeout: 35000 });
@@ -433,16 +446,16 @@ export async function runScrapeAndInspect(options = {}) {
         }, currentKw);
 
         if (extractedPages.length > 0) {
-          logMessage(`[${currentKw}] Đã phát hiện ${extractedPages.length} Fanpage liên quan.`, 'info');
+          logMessage(`[${searchKw}] Đã phát hiện ${extractedPages.length} Fanpage liên quan.`, 'info');
           candidateItems.push(...extractedPages);
         }
       } catch (errPages) {
-        console.warn(`Lỗi quét tab Pages cho "${currentKw}":`, errPages.message);
+        console.warn(`Lỗi quét tab Pages cho "${searchKw}":`, errPages.message);
       }
 
-      // GIAI ĐOẠN 2: Quét bài viết Facebook cho currentKw
-      const postsSearchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(currentKw)}`;
-      logMessage(`[${currentKw}] Quét bài viết Facebook: ${postsSearchUrl}`, 'info');
+      // GIAI ĐOẠN 2: Quét bài viết Facebook cho searchKw
+      const postsSearchUrl = `https://www.facebook.com/search/posts/?q=${encodeURIComponent(searchKw)}`;
+      logMessage(`[${searchKw}] Quét bài viết Facebook: ${postsSearchUrl}`, 'info');
       currentCrawlerStatus.step = 'SCRAPING';
       broadcastEvent({ type: 'STATUS', status: getCrawlerStatus() });
 
@@ -664,6 +677,7 @@ export async function runScrapeAndInspect(options = {}) {
           violationDetails: analysis.violationDetails,
           legalBasis: analysis.legalBasis,
           recommendations: analysis.recommendations,
+          location: locationLabel,
           medinetVerification: medinetCheck ? {
             checkedAt: new Date().toISOString(),
             found: medinetCheck.found,
@@ -672,7 +686,7 @@ export async function runScrapeAndInspect(options = {}) {
             summary: medinetCheck.summary,
             directPortalUrl: medinetCheck.directPortalUrl
           } : null,
-          notes: `Tự động phát hiện khi rà soát thật từ khóa "${p.matchedKeyword || keywordList[0]}" (${categoryName ? `Chuyên mục: ${categoryName} - ` : ''}${p.authorType === 'Page' ? 'Trang Fanpage' : 'Hội Nhóm'})`
+          notes: `Tự động phát hiện khi rà soát thật từ khóa "${p.matchedKeyword || keywordList[0]}" tại địa bàn [${locationLabel}] (${categoryName ? `Chuyên mục: ${categoryName} - ` : ''}${p.authorType === 'Page' ? 'Trang Fanpage' : 'Hội Nhóm'})`
         };
 
         addViolation(item);

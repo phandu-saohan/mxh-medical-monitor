@@ -19,7 +19,9 @@ import {
   BookOpen,
   FolderOpen,
   Tag,
-  ChevronDown
+  ChevronDown,
+  MapPin,
+  Navigation
 } from 'lucide-react';
 
 export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
@@ -52,6 +54,25 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
   const [selectedCategory, setSelectedCategory] = useState('Tất cả');
   const [showKeywordVault, setShowKeywordVault] = useState(false);
   const [scanMode, setScanMode] = useState('single'); // 'single' | 'category'
+
+  // Định vị khu vực địa bàn quét (TP.HCM, Quận/Huyện, Phường)
+  const [selectedLocation, setSelectedLocation] = useState('TP.HCM');
+  const [selectedDistrict, setSelectedDistrict] = useState('Tất cả Quận/Huyện');
+  const [selectedWard, setSelectedWard] = useState('Tất cả Phường/Xã');
+
+  // Bản đồ Quận/Huyện & Phường tiêu biểu tại TP.HCM tập trung nhiều cơ sở thẩm mỹ
+  const HCMC_DISTRICTS = {
+    'Tất cả Quận/Huyện': [],
+    'Quận 1': ['Tất cả Phường/Xã', 'Phường Bến Thành', 'Phường Bến Nghé', 'Phường Đa Kao', 'Phường Tân Định', 'Phường Phạm Ngũ Lão', 'Phường Cầu Ông Lãnh'],
+    'Quận 3': ['Tất cả Phường/Xã', 'Phường Võ Thị Sáu', 'Phường 1', 'Phường 2', 'Phường 4', 'Phường 5', 'Phường 9', 'Phường 11', 'Phường 14'],
+    'Quận 10': ['Tất cả Phường/Xã', 'Phường 12', 'Phường 10', 'Phường 11', 'Phường 13', 'Phường 14', 'Phường 15', 'Phường 2', 'Phường 4'],
+    'Quận Phú Nhuận': ['Tất cả Phường/Xã', 'Phường 1', 'Phường 2', 'Phường 7', 'Phường 8', 'Phường 9', 'Phường 11', 'Phường 13'],
+    'Quận Bình Thạnh': ['Tất cả Phường/Xã', 'Phường 1', 'Phường 2', 'Phường 12', 'Phường 19', 'Phường 25', 'Phường 26'],
+    'Quận Tân Bình': ['Tất cả Phường/Xã', 'Phường 2', 'Phường 4', 'Phường 12', 'Phường 13', 'Phường 15'],
+    'TP. Thủ Đức': ['Tất cả Phường/Xã', 'Phường Thảo Điền', 'Phường An Phú', 'Phường Hiệp Bình Chánh', 'Phường Linh Chiểu', 'Phường Tăng Nhơn Phú A'],
+    'Quận 5': ['Tất cả Phường/Xã', 'Phường 1', 'Phường 4', 'Phường 7', 'Phường 11', 'Phường 12'],
+    'Quận 7': ['Tất cả Phường/Xã', 'Phường Tân Phong', 'Phường Phú Mỹ', 'Phường Tân Quy', 'Phường Bình Thuận']
+  };
 
   const quickKeywords = [
     'nâng mũi cấu trúc',
@@ -180,14 +201,23 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
     setProgress(5);
     setFoundItems([]);
 
+    const chosenDistrict = selectedDistrict !== 'Tất cả Quận/Huyện' ? selectedDistrict : '';
+    const chosenWard = selectedWard !== 'Tất cả Phường/Xã' ? selectedWard : '';
+
     const bodyPayload = activeMode === 'category'
       ? {
           keywords: categoryKeywords.length > 0 ? categoryKeywords : [keyword],
           categoryName: selectedCategory,
+          location: selectedLocation,
+          district: chosenDistrict,
+          ward: chosenWard,
           maxPosts
         }
       : {
           keyword,
+          location: selectedLocation,
+          district: chosenDistrict,
+          ward: chosenWard,
           maxPosts
         };
 
@@ -581,6 +611,74 @@ export default function CrawlerModal({ isOpen, onClose, onRefreshViolations }) {
                           ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* CHỌN VỊ TRÍ ĐỊA BÀN QUÉT: TP.HCM & PHƯỜNG / QUẬN */}
+                  <div className="mt-3 p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-blue-900 flex items-center space-x-1">
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Khoanh vùng địa bàn quét bài:</span>
+                      </span>
+                      <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.2 rounded font-bold">
+                        {selectedWard !== 'Tất cả Phường/Xã' ? selectedWard : (selectedDistrict !== 'Tất cả Quận/Huyện' ? selectedDistrict : 'Toàn TP.HCM')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      {/* Tỉnh / Thành phố */}
+                      <div>
+                        <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Tỉnh / Thành:</label>
+                        <select
+                          value={selectedLocation}
+                          onChange={(e) => {
+                            setSelectedLocation(e.target.value);
+                            setSelectedDistrict('Tất cả Quận/Huyện');
+                            setSelectedWard('Tất cả Phường/Xã');
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-800"
+                        >
+                          <option value="TP.HCM">TP. Hồ Chí Minh</option>
+                          <option value="Hà Nội">Hà Nội</option>
+                          <option value="Đà Nẵng">Đà Nẵng</option>
+                          <option value="Bình Dương">Bình Dương</option>
+                          <option value="Đồng Nai">Đồng Nai</option>
+                          <option value="Cần Thơ">Cần Thơ</option>
+                        </select>
+                      </div>
+
+                      {/* Quận / Huyện */}
+                      <div>
+                        <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Quận / Huyện:</label>
+                        <select
+                          value={selectedDistrict}
+                          onChange={(e) => {
+                            setSelectedDistrict(e.target.value);
+                            setSelectedWard('Tất cả Phường/Xã');
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-800"
+                        >
+                          {Object.keys(HCMC_DISTRICTS).map((dist) => (
+                            <option key={dist} value={dist}>{dist}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Phường / Xã */}
+                      <div>
+                        <label className="text-[10px] font-semibold text-slate-600 block mb-0.5">Phường / Xã:</label>
+                        <select
+                          value={selectedWard}
+                          onChange={(e) => setSelectedWard(e.target.value)}
+                          disabled={!HCMC_DISTRICTS[selectedDistrict] || HCMC_DISTRICTS[selectedDistrict].length === 0}
+                          className="w-full bg-white border border-slate-300 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-800 disabled:opacity-50"
+                        >
+                          {(HCMC_DISTRICTS[selectedDistrict] || ['Tất cả Phường/Xã']).map((w) => (
+                            <option key={w} value={w}>{w}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
 
