@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { analyzeContent, analyzeContentWithAi } from './analyzer.js';
+import { analyzeContent, analyzeContentWithAi, isCosmeticRelated } from './analyzer.js';
 import { extractOcrFromImageUrl } from './ocr.js';
 import { addViolation, getViolations, incrementScannedCount } from './db.js';
 import { searchMedinetLicense } from './medinet.js';
@@ -563,7 +563,15 @@ export async function runScrapeAndInspect(options = {}) {
         ...p,
         content: cleanContent || p.rawContent || p.content
       };
-    }).filter(p => p.content && p.content.length >= 20);
+    }).filter(p => {
+      if (!p.content || p.content.length < 20) return false;
+      // QUY TẮC BẮT BUỘC: CHỈ LẤY DỊCH VỤ THẨM MỸ CỦA PHÒNG KHÁM, BỆNH VIỆN, CƠ SỞ LÀM ĐẸP
+      // LOẠI BỎ 100% CÁC TIN TỨC ĐỜI SỐNG, RAO VẶT, TIÊU DÙNG KHÔNG LIÊN QUAN
+      const combinedText = `${p.author || ''} ${p.content || ''}`;
+      return isCosmeticRelated(combinedText);
+    });
+
+    logMessage(`Đã lọc chuyên biệt dịch vụ thẩm mỹ y tế: giữ lại ${processedItems.length}/${uniqueCandidates.length} mục có dấu hiệu dịch vụ phòng khám/thẩm mỹ viện.`, 'info');
 
     // ==========================================
     // ƯU TIÊN SẮP XẾP: Trang Fanpage (Page) lên trước Hội nhóm (Group)

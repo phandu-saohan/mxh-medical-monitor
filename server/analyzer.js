@@ -122,27 +122,53 @@ export const LEGAL_RULES = [
 ];
 
 /**
- * Danh mục nhận diện nội dung/dịch vụ liên quan đến THẨM MỸ Y TẾ & LÀM ĐẸP
- * Dùng để khoanh vùng trọng tâm, LOẠI BỎ 100% các chủ đề không liên quan (quần áo, ăn uống, đời sống...).
+ * Danh mục nhận diện nội dung/dịch vụ liên quan đến THẨM MỸ Y TẾ & PHẪU THUẬT / TIÊM CHÍCH CỦA CƠ SỞ / PHÒNG KHÁM / BỆNH VIỆN
+ * Dùng để khoanh vùng trọng tâm: CHỈ LẤY DỊCH VỤ THẨM MỸ CỦA PHÒNG KHÁM, BỆNH VIỆN, CƠ SỞ THẨM MỸ.
+ * TUYỆT ĐỐI LOẠI BỎ các tin tức rác, giải trí, bán hàng tiêu dùng, mỹ phẩm bôi, đồ gia dụng, ăn uống...
  */
-export const COSMETIC_INDICATORS = [
-  'thẩm mỹ', 'spa', 'phẫu thuật', 'tiêm', 'filler', 'botox', 'meso', 
-  'nâng mũi', 'cắt mí', 'hút mỡ', 'nâng ngực', 'căng chỉ', 'gọt cằm', 
-  'độn cằm', 'độn thái dương', 'cắt môi', 'truyền trắng', 'chăm sóc da', 
-  'trẻ hóa', 'trị nám', 'trị mụn', 'bác sĩ thẩm mỹ', 'viện thẩm mỹ', 
-  'phòng khám', 'clinic', 'beauty', 'làm đẹp', 'tiểu phẫu', 'đại phẫu',
-  'bàn mổ', 'giảm béo', 'siết eo', 'cấy mỡ', 'nâng cung mày', 'bọc răng sứ',
-  'nhấn mí', 'làm mũi', 'làm ngực', 'cắt da thừa', 'hút mỡ bụng', 'cấy phấn',
-  'tạo hình', 'phun xăm', 'cắt da thừa', 'chỉnh hình'
+export const CLINIC_AESTHETIC_INDICATORS = [
+  // 1. Thủ thuật / Phẫu thuật thẩm mỹ xâm lấn
+  'nâng mũi', 'cắt mí', 'nhấn mí', 'bóc mỡ mí', 'nâng cung mày',
+  'tiêm filler', 'tiêm botox', 'tiêm meso', 'tiêm tan mỡ', 'tiêm căng bóng',
+  'hút mỡ', 'hút mỡ bụng', 'siết eo', 'cấy mỡ', 'cấy mỡ tự thân',
+  'nâng ngực', 'độn thái dương', 'gọt hàm', 'gọt cằm', 'độn cằm',
+  'căng chỉ', 'căng da chỉ', 'căng chỉ collagen', 'cắt môi trái tim',
+  'tạo hình thành bụng', 'truyền trắng', 'tiểu phẫu', 'đại phẫu', 'phẫu thuật thẩm mỹ',
+  // 2. Định danh cơ sở dịch vụ y tế / thẩm mỹ
+  'phòng khám', 'bệnh viện', 'viện thẩm mỹ', 'thẩm mỹ viện', 'clinic', 'beauty center',
+  'bác sĩ', 'bác sỹ', 'dr.', 'chuyên khoa thẩm mỹ', 'phẫu thuật viên',
+  'bàn mổ', 'phòng mổ', 'khám chữa bệnh', 'giấy phép hoạt động', 'gphđ'
+];
+
+// Danh sách các từ khóa rác / đời sống / buôn bán tiêu dùng cần LOẠI BỎ NGAY LẬP TỨC
+export const IRRELEVANT_NOISE_KEYWORDS = [
+  'quần áo', 'thời trang', 'váy', 'đầm', 'túi xách', 'giày dép',
+  'món ăn', 'ẩm thực', 'quán ăn', 'nhà hàng', 'cơm', 'trà sữa',
+  'bất động sản', 'nhà đất', 'cho thuê phòng', 'tuyển dụng kế toán',
+  'sổ xố', 'game', 'xem bói', 'tử vi', 'phong thủy', 'điện thoại', 'laptop'
 ];
 
 /**
- * Kiểm tra xem bài viết hoặc trang có liên quan đến DỊCH VỤ THẨM MỸ hay không
+ * Kiểm tra xem bài viết hoặc trang có liên quan đến DỊCH VỤ THẨM MỸ PHÒNG KHÁM / BỆNH VIỆN hay không
  */
 export function isCosmeticRelated(text) {
   if (!text || typeof text !== 'string') return false;
   const lower = text.toLowerCase();
-  return COSMETIC_INDICATORS.some(kw => lower.includes(kw));
+
+  // Nếu chứa từ khóa rác rõ rệt mà không có từ khóa phòng khám/bệnh viện/thẩm mỹ can thiệp
+  const hasNoise = IRRELEVANT_NOISE_KEYWORDS.some(n => lower.includes(n));
+  const hasStrongClinicAesthetic = [
+    'nâng mũi', 'cắt mí', 'tiêm filler', 'tiêm botox', 'tiêm meso', 'tiêm tan mỡ',
+    'hút mỡ', 'nâng ngực', 'căng chỉ', 'phẫu thuật thẩm mỹ', 'viện thẩm mỹ',
+    'phòng khám chuyên khoa', 'bệnh viện thẩm mỹ', 'bệnh viện đa khoa'
+  ].some(kw => lower.includes(kw));
+
+  if (hasNoise && !hasStrongClinicAesthetic) {
+    return false;
+  }
+
+  // Phải chứa ít nhất 1 chỉ dấu dịch vụ thẩm mỹ y tế của cơ sở/phòng khám/bệnh viện
+  return CLINIC_AESTHETIC_INDICATORS.some(kw => lower.includes(kw));
 }
 
 /**
@@ -270,10 +296,16 @@ Căn cứ pháp lý:
 NHIỆM VỤ CỐT LÕI:
 Thẩm định xem bài đăng sau có vi phạm các quy định pháp luật về QUẢNG CÁO DỊCH VỤ THẨM MỸ Y TẾ hay không.
 
-QUY TẮC BẤT DI BẤT DỊCH (TẬP TRUNG VI PHẠM THẨM MỸ - KHÔNG LAN MAN SANG VẤN ĐỀ KHÁC):
-1. CHỈ TẬP TRUNG VÀO DỊCH VỤ THẨM MỸ: Can thiệp xâm lấn cơ thể (tiêm filler/botox/meso, nâng mũi, cắt mí, hút mỡ, nâng ngực, căng chỉ, độn cằm...), cam kết kết quả sai sự thật, hình ảnh Before-After tại cơ sở làm đẹp.
-2. TUYỆT ĐỐI KHÔNG BẮT LỖI LAN MAN: Bỏ qua hoàn toàn bài viết không liên quan đến thẩm mỹ (quần áo, mỹ phẩm bôi ngoài da thông thường, đồ gia dụng, ăn uống, đời sống cá nhân...). Dịch vụ làm đẹp không xâm lấn (gội đầu, chăm sóc da cơ bản, làm nail) là HỢP LỆ, trừ khi có tiêm chích/phẫu thuật hoặc cam kết chữa khỏi 100%.
-3. ĐẶC BIỆT CHÚ Ý TRANG FANPAGE: ${isPage ? 'ĐÂY LÀ TRANG FANPAGE KINH DOANH DỊCH VỤ THẨM MỸ -> Kiểm tra kỹ tính hợp pháp của dịch vụ chào mời và giấy phép.' : 'Tài khoản cá nhân / Hội nhóm.'}
+QUY TẮC BẤT DI BẤT DỊCH (CHỈ TẬP TRUNG DỊCH VỤ THẨM MỸ CỦA PHÒNG KHÁM HOẶC BỆNH VIỆN - TUYỆT ĐỐI KHÔNG LẤY TIN KHÁC):
+1. ĐỐI TƯỢNG BẮT BUỘC: Chỉ thẩm định và ghi nhận các dịch vụ thẩm mỹ y tế của PHÒNG KHÁM, BỆNH VIỆN, VIỆN THẨM MỸ, CƠ SỞ LÀM ĐẸP CHUYÊN NGHIỆP:
+   - Các can thiệp thẩm mỹ: nâng mũi, cắt mí, hút mỡ, tiêm filler/botox/meso, nâng ngực, căng chỉ, độn cằm, bóc mỡ mắt, truyền trắng, phẫu thuật tạo hình...
+   - Quảng cáo cơ sở thẩm mỹ/phòng khám không công khai Giấy phép hoạt động (GPHĐ) hoặc vượt quá phạm vi chuyên môn được cấp phép.
+   - Cam kết kết quả điều trị thẩm mỹ sai sự thật ("cam kết 100%", "vĩnh viễn không đau"), sử dụng hình ảnh Before/After tại bàn mổ/phòng khám.
+2. TUYỆT ĐỐI LOẠI BỎ (isViolation = false): Bỏ qua 100% tất cả các tin tức khác:
+   - Tin tức đời sống, tin tức xã hội, pháp luật chung, giải trí, thể thao.
+   - Mua bán hàng hóa tiêu dùng, quần áo thời trang, ăn uống, bất động sản.
+   - Bài viết chia sẻ mẹo vặt cá nhân không mang tính chất quảng cáo dịch vụ thẩm mỹ của cơ sở/phòng khám/bệnh viện.
+3. PHÂN LOẠI TRANG: ${isPage ? 'ĐÂY LÀ TRANG FANPAGE DOANH NGHIỆP/CƠ SỞ -> Tập trung kiểm tra giấy phép hoạt động và phạm vi dịch vụ thẩm mỹ.' : 'Tài khoản cá nhân / Hội nhóm.'}
 
 DỮ LIỆU ĐÁNH GIÁ:
 - Tên Trang/Tác giả: "${post.author || 'Chưa xác định'}"
